@@ -18,6 +18,13 @@ for p in $(ls "$DATA/backup" 2>/dev/null); do
 done
 APPSTR=$(printf '%s' "$APPSTR" | sed 's/,$//')
 
+# 本机已安装的第三方应用（供 WebUI 过滤未安装的配置项）
+INSTSTR=""
+for p in $(pm list packages -3 2>/dev/null | sed 's/^package://'); do
+    INSTSTR="$INSTSTR\"$p\","
+done
+INSTSTR=$(printf '%s' "$INSTSTR" | sed 's/,$//')
+
 ROOT="未知"
 if [ -d /data/adb/ksu ]; then
     KVER=$(ksud -V 2>/dev/null | awk '{print $2}')
@@ -38,6 +45,6 @@ set -- $(df -k /data 2>/dev/null | tail -1)
 DT=${2:-0}
 DU=${3:-0}
 
-printf '{"version":"%s","active":%d,"webview":"%s","device":"%s","android":"%s","root":"%s","backupKB":%d,"dataUsedKB":%s,"dataTotalKB":%s,"apps":{%s}}\n' \
-    "$VER" "$ACT" "$WV" "$DEV" "$AND" "$ROOT" "$BK" "$DU" "$DT" "$APPSTR" > "$OUT"
+printf '{"version":"%s","active":%d,"webview":"%s","device":"%s","android":"%s","root":"%s","backupKB":%d,"dataUsedKB":%s,"dataTotalKB":%s,"installed":[%s],"apps":{%s}}\n' \
+    "$VER" "$ACT" "$WV" "$DEV" "$AND" "$ROOT" "$BK" "$DU" "$DT" "$INSTSTR" "$APPSTR" > "$OUT"
 chmod 644 "$OUT"

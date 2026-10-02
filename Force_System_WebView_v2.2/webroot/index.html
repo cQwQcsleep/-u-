@@ -441,6 +441,28 @@ header {
 }
 .tag.dim { background: var(--card4); color: var(--fg2); }
 
+/* 未加入的应用行（扫描发现，可一键加入） */
+.arow.cand .tag.cand-t { background: color-mix(in srgb, var(--tert) 16%, transparent); color: var(--tert); }
+.arow.cand .atx { align-self: center; }
+.cand-add {
+    flex-shrink: 0; height: 32px; padding: 0 13px; border: 0; border-radius: 9px;
+    background: var(--pri-c); color: var(--on-pri-c);
+    font: 600 12px/1 inherit; cursor: pointer; transition: transform .12s;
+}
+.cand-add:active { transform: scale(.94); }
+.arow .dchip-wrap { margin-top: 6px; }
+.list-refresh {
+    display: none; align-items: center; gap: 9px;
+    padding: 10px 15px; margin-bottom: 8px; border-radius: 14px;
+    background: var(--card); color: var(--fg2); font-size: 12.5px; font-weight: 500;
+}
+.list-refresh.show { display: flex; }
+.list-refresh i {
+    width: 13px; height: 13px; border-radius: 50%; flex-shrink: 0;
+    border: 2px solid var(--card4); border-top-color: var(--pri);
+    animation: spin-scan 1s linear infinite; display: block;
+}
+
 /* M3 开关 */
 .sw { position: relative; width: 50px; height: 30px; flex-shrink: 0; cursor: pointer; }
 .sw input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; z-index: 2; }
@@ -1389,6 +1411,7 @@ body.sheet-open .toast.show { transform: translateX(-50%) translateY(0); }
                 <button class="experimental-btn last" id="b-last-scan">查看上次</button>
             </div>
         </div>
+        <div class="list-refresh" id="list-refresh"><i></i><span>正在刷新应用列表…</span></div>
         <div class="applist" id="list">
             <div class="loadbox spin">加载中…</div>
         </div>
@@ -1838,6 +1861,7 @@ tabBtns.forEach(b => b.addEventListener('click', () => {
         if (idx !== 1) fab.classList.remove('open');
     }
     pages[cur].classList.remove('leaving');
+    if (idx === 1) refreshLight();
 }));
 
 /* 返回手势 */
@@ -1991,93 +2015,190 @@ function updateDirty() {
     });
 }
 
+/* 应用列表：已加入（可开关） + 扫描发现的可管控应用（可一键加入） */
+let lightData = null;
+let lightTs = 0, lightBusy = false;
+
+async function loadLight() {
+    try {
+        const r = await fetch('scan-light.txt?' + Date.now(), { cache: 'no-store' });
+        if (!r.ok) return [];
+        const text = await r.text();
+        const out = [], seen = new Set();
+        for (const ln of text.trim().split('\n')) {
+            const parts = ln.split('|'), pkg = parts[0];
+            if (!pkg || seen.has(pkg)) continue;
+            if (pkg === 'STARTED' || pkg === 'BUSY' || pkg === 'PROGRESS' || pkg === 'DONE') continue;
+            seen.add(pkg);
+            out.push({ pkg, dirs: (parts[3] || '').trim(), game: (parts[4] || '').trim() === 'game' });
+        }
+        return out;
+    } catch (e) { return []; }
+}
+
+async function refreshLight(force) {
+    if (lightBusy) return;
+    if (!force && Date.now() - lightTs < 60000) return;
+    lightBusy = true;
+    const hint = $('list-refresh');
+    if (hint) hint.classList.add('show');
+    try { await exec('sh ' + MDIR + '/scan.sh light'); } catch (e) {}
+    try {
+        lightData = await loadLight();
+        lightTs = Date.now();
+        renderList();
+    } catch (e) {}
+    lightBusy = false;
+    if (hint) hint.classList.remove('show');
+}
+
+/* 已安装清单未知（旧版 status.json）时不过滤，避免列表被清空 */
+function listInstalled() {
+    const arr = status && Array.isArray(status.installed) ? status.installed : null;
+    return arr ? new Set(arr) : null;
+}
+
+function listRows() {
+    const st = (status && status.apps) || {};
+    const installed = listInstalled();
+    const ok = pkg => !installed || installed.has(pkg);
+    const rows = [];
+    for (const [pkg, info] of Object.entries(config.apps)) {
+        if (!ok(pkg)) continue;
+        rows.push({ pkg, kind: 'cfg', active: st[pkg] === true, name: info.name || appName(pkg), dirs: (info.dirs || []).join(' ') });
+    }
+    for (const it of (lightData || [])) {
+        if (config.apps[it.pkg] || !ok(it.pkg)) continue;
+        rows.push({ pkg: it.pkg, kind: 'cand', active: false, name: appName(it.pkg), dirs: it.dirs, game: it.game });
+    }
+    const rank = r => r.kind === 'cand' ? 2 : (r.active ? 0 : 1);
+    rows.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, 'zh'));
+    return rows;
+}
+
+function candRowHtml(r) {
+    const dirs = splitDirs(r.dirs);
+    let chips = dirs.slice(0, 3).map(d => '<span class="dchip">' + d + '</span>').join('');
+    if (dirs.length > 3) chips += '<span class="dchip">+' + (dirs.length - 3) + '</span>';
+    return `
+            <div class="aicon"><img src="ksu://icon/${r.pkg}" alt="" onerror="this.parentNode.classList.add('noimg')" loading="lazy"></div>
+            <div class="atx">
+                <div class="aname"><span>${r.name}</span><span class="tag cand-t">未加入</span>${r.game ? '<span class="kernel-badge game"></span>' : ''}</div>
+                <div class="apkg">${r.pkg}</div>
+                ${chips ? '<div class="dchip-wrap">' + chips + '</div>' : ''}
+            </div>
+            <button class="cand-add">加入</button>`;
+}
+
+/* 长按进详情（与应用列表共用三级详情页） */
+function bindRowLongPress(row, pkg, active) {
+    let lpTimer = null, lpFired = false;
+    row.addEventListener('touchstart', (e) => {
+        lpFired = false;
+        lpTimer = setTimeout(async () => {
+            lpFired = true;
+            const st = (status && status.apps) || {};
+            const cfgInfo = config.apps[pkg] || {};
+            let dirs = (cfgInfo.dirs || []).join(' ');
+            let mstat = active ? '已生效' : '';
+            let bkmb = 0;
+            if (active) {
+                mstat = '已生效';
+                try {
+                    const r = await exec('du -sm ' + DATA + '/backup/' + pkg + ' 2>/dev/null | cut -f1');
+                    bkmb = parseInt((r || '').trim(), 10) || 0;
+                } catch (e2) {}
+            } else if (!dirs) {
+                // 未添加的应用：从上次扫描缓存取特征目录
+                try {
+                    const raw = localStorage.getItem('fsw_last_scan');
+                    const o = raw ? JSON.parse(raw) : null;
+                    const it = o && Array.isArray(o.data) ? o.data.find(x => x.pkg === pkg) : null;
+                    if (it) { dirs = it.dirs || ''; mstat = '未管理'; }
+                } catch (e2) {}
+            }
+            showDetail(pkg, active ? '已生效' : '未管控', dirs, mstat || '未管理', bkmb);
+            if (navigator.vibrate) navigator.vibrate(15);
+        }, 500);
+    }, { passive: true });
+    const lpCancel = () => { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } };
+    row.addEventListener('touchend', lpCancel);
+    row.addEventListener('touchmove', lpCancel);
+    row.addEventListener('touchcancel', lpCancel);
+    row.addEventListener('contextmenu', (e) => { if (lpFired) e.preventDefault(); });
+}
+
+async function addCandidateApp(pkg, dirsStr) {
+    const dirs = splitDirs(dirsStr);
+    if (!dirs.length) { toast('该应用无可加入目录', true); return; }
+    try {
+        await loadConfig();
+        if (config.apps[pkg]) { toast('已在列表中'); return; }
+        config.apps[pkg] = { name: appName(pkg), enabled: false, dirs: dirs };
+        await saveConfig();
+        renderList();
+        toast('已加入「' + appName(pkg) + '」，打开开关并保存后生效');
+    } catch (e) { toast('加入失败：' + e.message, true); }
+}
+
 function renderList() {
     const box = $('list');
-    const st = (status && status.apps) || {};
-    const entries = Object.entries(config.apps).sort((x, y) => {
-        const sx = st[x[0]] ? 1 : 0, sy = st[y[0]] ? 1 : 0;
-        if (sx !== sy) return sy - sx;
-        const ex = config.apps[x[0]].enabled ? 1 : 0, ey = config.apps[y[0]].enabled ? 1 : 0;
-        return ey - ex;
-    });
+    const rows = (config && status) ? listRows() : [];
     const existing = {};
     box.querySelectorAll('.arow').forEach(r => { existing[r.dataset.pkg] = r; });
-    const sameSet = Object.keys(existing).length === entries.length && entries.every(([pkg]) => existing[pkg]);
+    const sameSet = rows.length > 0 && Object.keys(existing).length === rows.length &&
+        rows.every(r => existing[r.pkg] && existing[r.pkg].dataset.kind === r.kind);
     if (sameSet) {
-        for (const [pkg] of entries) {
-            const row = existing[pkg];
-            if (!row) continue;
-            const active = st[pkg] === true;
+        for (const r of rows) {
+            const row = existing[r.pkg];
+            if (!row || r.kind !== 'cfg') continue;
             const tag = row.querySelector('.tag');
-            if (tag) { tag.textContent = active ? '生效中' : '未生效'; tag.className = 'tag' + (active ? '' : ' dim'); }
+            if (tag) { tag.textContent = r.active ? '生效中' : '未生效'; tag.className = 'tag' + (r.active ? '' : ' dim'); }
             const cb = row.querySelector('input');
-            if (cb) { cb.checked = active; cb.dataset.init = String(active); }
+            if (cb) { cb.checked = r.active; cb.dataset.init = String(r.active); }
         }
-        for (const [pkg] of entries) {
-            if (existing[pkg]) box.appendChild(existing[pkg]);
-        }
+        for (const r of rows) { if (existing[r.pkg]) box.appendChild(existing[r.pkg]); }
         updateDirty();
         return;
     }
     box.innerHTML = '';
-    for (const [pkg, info] of entries) {
-        const active = st[pkg] === true;
+    if (!rows.length) {
+        box.innerHTML = '<div class="loadbox">未发现可管控应用，可点「分析应用」查看详情</div>';
+        updateDirty();
+        return;
+    }
+    for (const r of rows) {
         const row = document.createElement('div');
-        row.className = 'arow';
-        row.dataset.pkg = pkg;
-        row.innerHTML = `
-            <div class="aicon"><img src="ksu://icon/${pkg}" alt="" onerror="this.parentNode.classList.add('noimg')" loading="lazy"></div>
+        row.className = 'arow' + (r.kind === 'cand' ? ' cand' : '');
+        row.dataset.pkg = r.pkg;
+        row.dataset.kind = r.kind;
+        if (r.kind === 'cand') {
+            row.innerHTML = candRowHtml(r);
+            row.addEventListener('click', () => showDetail(r.pkg, '未管控', r.dirs, '未管理', 0));
+            row.querySelector('.cand-add').addEventListener('click', (e) => {
+                e.stopPropagation();
+                addCandidateApp(r.pkg, r.dirs);
+            });
+        } else {
+            row.innerHTML = `
+            <div class="aicon"><img src="ksu://icon/${r.pkg}" alt="" onerror="this.parentNode.classList.add('noimg')" loading="lazy"></div>
             <div class="atx">
-                <div class="aname"><span>${info.name}</span><span class="tag ${active ? '' : 'dim'}">${active ? '生效中' : '未生效'}</span></div>
-                <div class="apkg">${pkg}</div>
+                <div class="aname"><span>${r.name}</span><span class="tag ${r.active ? '' : 'dim'}">${r.active ? '生效中' : '未生效'}</span></div>
+                <div class="apkg">${r.pkg}</div>
             </div>
             <label class="sw" onclick="event.stopPropagation()">
-                <input type="checkbox" data-pkg="${pkg}" ${active ? 'checked' : ''} data-init="${active}">
+                <input type="checkbox" data-pkg="${r.pkg}" ${r.active ? 'checked' : ''} data-init="${r.active}">
                 <span class="tr"></span><span class="th"></span>
             </label>`;
+            row.addEventListener('click', () => row.querySelector('input').click());
+            bindRowLongPress(row, r.pkg, r.active);
+            row.querySelector('input').addEventListener('change', () => {
+                row.classList.remove('flash');
+                requestAnimationFrame(() => requestAnimationFrame(() => row.classList.add('flash')));
+                updateDirty();
+            });
+        }
         box.appendChild(row);
-        row.addEventListener('click', () => row.querySelector('input').click());
-        // 长按进详情（与应用列表共用三级详情页）
-        let lpTimer = null, lpFired = false;
-        row.addEventListener('touchstart', (e) => {
-            lpFired = false;
-            lpTimer = setTimeout(async () => {
-                lpFired = true;
-                const st = (status && status.apps) || {};
-                const active = st[pkg] === true;
-                const cfgInfo = config.apps[pkg] || {};
-                let dirs = (cfgInfo.dirs || []).join(' ');
-                let mstat = active ? '已生效' : '';
-                let bkmb = 0;
-                if (active) {
-                    mstat = '已生效';
-                    try {
-                        const r = await exec('du -sm ' + DATA + '/backup/' + pkg + ' 2>/dev/null | cut -f1');
-                        bkmb = parseInt((r || '').trim(), 10) || 0;
-                    } catch (e2) {}
-                } else if (!dirs) {
-                    // 未添加的应用：从上次扫描缓存取特征目录
-                    try {
-                        const raw = localStorage.getItem('fsw_last_scan');
-                        const o = raw ? JSON.parse(raw) : null;
-                        const it = o && Array.isArray(o.data) ? o.data.find(x => x.pkg === pkg) : null;
-                        if (it) { dirs = it.dirs || ''; mstat = '未管理'; }
-                    } catch (e2) {}
-                }
-                showDetail(pkg, active ? '已生效' : '未管控', dirs, mstat || '未管理', bkmb);
-                if (navigator.vibrate) navigator.vibrate(15);
-            }, 500);
-        }, { passive: true });
-        const lpCancel = () => { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } };
-        row.addEventListener('touchend', lpCancel);
-        row.addEventListener('touchmove', lpCancel);
-        row.addEventListener('touchcancel', lpCancel);
-        row.addEventListener('contextmenu', (e) => { if (lpFired) e.preventDefault(); });
-        row.querySelector('input').addEventListener('change', () => {
-    row.classList.remove('flash');
-    requestAnimationFrame(() => requestAnimationFrame(() => row.classList.add('flash')));
-    updateDirty();
-});
     }
     updateDirty();
 }
@@ -2296,6 +2417,7 @@ const APP_NAMES = {
     'com.tencent.mm': '微信', 'com.tencent.mobileqq': 'QQ', 'com.alibaba.android.rimet': '钉钉',
     'com.tencent.gamehelper.smoba': '王者营地',
     'com.netease.cloudmusic': '网易云音乐', 'com.tencent.qqmusic': 'QQ音乐', 'com.kugou.android': '酷狗音乐',
+    'com.luna.music': '汽水音乐',
     'com.ximalaya.ting.android': '喜马拉雅', 'com.sina.weibo': '微博', 'com.zhihu.android': '知乎',
     'com.xingin.xhs': '小红书', 'com.bilibili.app': '哔哩哔哩', 'tv.danmaku.bili': '哔哩哔哩',
     'com.douban.frodo': '豆瓣', 'com.UCMobile': 'UC浏览器', 'com.Qunar': '去哪儿',
@@ -3150,6 +3272,7 @@ onboardingReady.then(() => { if (!onboarding.disclaimer) showDisclaimer(); });
         await loadConfig();
         try { await exec('sh ' + MDIR + '/status.sh'); } catch (e) {}
         await loadStatus();
+        lightData = await loadLight();
         renderList(); renderOverview();
     } catch (e) {
         toast('初始化失败：' + e.message, true, 5000);

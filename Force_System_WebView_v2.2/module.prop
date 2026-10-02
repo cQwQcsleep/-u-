@@ -1,0 +1,6 @@
+id=force_system_webview
+name=Force System WebView
+version=v2.2
+versionCode=22
+author=ygxx
+description=强制应用使用系统 WebView。v2.2：应用列表改为扫描本机应用驱动，预置目录转为模板，未安装应用不再显示。

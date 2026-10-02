@@ -1,0 +1,23 @@
+{
+  "com.jingdong.app.mall": ["files/DongCore", "files/WebViewDownloadPlugin", "app_tbs", "app_tbs_64", "app_tbs_common_share", "app_extracted_dongCore", "app_webview_d6", "app_x5webview"],
+  "com.taobao.taobao": ["app_u4_webview", "app_u4sdk"],
+  "com.MobileTicket": ["app_h5container", "app_u4_webview", "app_u4sdk", "app_ucmsdk"],
+  "com.tencent.mobileqq": ["app_x5webview", "app_tbs", "app_tbs_64", "app_tbs_common_share", "app_xwalk_-1", "app_xwalkconfig", "app_xwalkplugin", "app_xweb_data"],
+  "com.tencent.qqmusic": ["app_x5webview", "app_tbs", "app_tbs_64", "app_tbs_common_share"],
+  "com.baidu.BaiduMap": ["app_webview_com.baidu.BaiduMap"],
+  "com.xingin.xhs": ["app_r1_webview_64"],
+  "com.luna.music": ["app_webview"],
+  "com.taobao.idlefish": ["app_u4_webview", "app_u4sdk"],
+  "com.alibaba.android.rimet": ["app_h5apps", "app_h5container", "app_u4_webview", "app_u4sdk"],
+  "com.tencent.mm": ["app_xwalk_-1", "app_xwalkconfig", "app_xwalkplugin", "app_xweb_data"],
+  "com.ss.android.ugc.aweme": ["files/webview_bytedance", "files/plugins/com.ss.android.ugc.aweme.v8"],
+  "com.tencent.wemeet.app": ["app_tbs", "app_tbs_64", "app_tbs_common_share"],
+  "com.aliyun.tongyi": ["app_u4_webview", "app_u4sdk"],
+  "com.xunmeng.pinduoduo": ["app_meco_64", "app_meco_textures", "app_meco_webview_meco"],
+  "com.tencent.wework": ["app_tbs", "app_tbs_64", "app_tbs_common_share", "app_xwalk_1460263", "app_xwalkconfig", "app_xwalkplugin", "app_xweb_data"],
+  "com.quark.clouddrive": ["app_u4_webview", "app_u4sdk"],
+  "com.autonavi.minimap": ["files/nebulaInstallApps"],
+  "com.eg.android.AlipayGphone": ["app_h5container", "app_plugins_lib", "app_myweb_anr", "app_myweb_crash", "app_webview_mywebview_0"],
+  "com.greenpoint.android.mc10086.activity": ["app_tbs", "app_tbs_64", "files/myweb_extract_7z_so", "files/mywebview_sdk"],
+  "tv.danmaku.bili": ["app_h5"]
+}
