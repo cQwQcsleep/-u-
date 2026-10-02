@@ -22,3 +22,9 @@ fi
 mkdir -p $MODDIR/webroot
 cp -f "$CONFIG_FILE" "$MODDIR/webroot/config.json" 2>/dev/null
 chmod 644 "$MODDIR/webroot/config.json" 2>/dev/null
+
+# 升级后保留用户的一次性提示状态（免责声明、实验性解锁、图例确认）
+if [ -f "$DATA_ROOT/onboarding.json" ]; then
+    cp -f "$DATA_ROOT/onboarding.json" "$MODDIR/webroot/onboarding.json" 2>/dev/null
+    chmod 644 "$MODDIR/webroot/onboarding.json" 2>/dev/null
+fi

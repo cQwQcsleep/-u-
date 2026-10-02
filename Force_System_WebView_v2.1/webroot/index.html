@@ -1905,6 +1905,8 @@ document.querySelectorAll('.grab').forEach(g => {
 
 /* 读写配置 */
 async function loadConfig() {
+    // 升级后未重启的窗口期：以数据目录中的配置为准，避免读到包内默认配置
+    try { await exec('if [ -f ' + DATA + '/config.json ]; then cp -f ' + DATA + '/config.json ' + MDIR + '/webroot/config.json; fi'); } catch (e) {}
     const r = await fetch('config.json?' + Date.now());
     if (!r.ok) throw new Error('配置读取失败');
     config = await r.json();
@@ -1916,15 +1918,19 @@ async function loadStatus() {
     status = await r.json();
 }
 function shq(s) { return "'" + String(s).replace(/'/g, "'\\''") + "'"; }
-/* 首次使用状态保存在模块目录；卸载模块后该文件会随模块移除。 */
+/* 首次使用状态：模块目录供 WebUI 读取，同时镜像到数据目录，模块升级后可恢复 */
 const ONBOARDING_FILE = MDIR + '/webroot/onboarding.json';
 let onboarding = { disclaimer: false, experimental: false, scanLegend: false, selectAck: false };
 async function saveOnboarding() {
     try {
-        await exec('printf %s ' + shq(JSON.stringify(onboarding)) + ' > ' + ONBOARDING_FILE + ' && chmod 644 ' + ONBOARDING_FILE);
+        await exec('printf %s ' + shq(JSON.stringify(onboarding)) + ' > ' + ONBOARDING_FILE +
+            ' && mkdir -p ' + DATA + ' && cp -f ' + ONBOARDING_FILE + ' ' + DATA + '/onboarding.json' +
+            ' && chmod 644 ' + ONBOARDING_FILE + ' ' + DATA + '/onboarding.json');
     } catch (e) {}
 }
 const onboardingReady = (async () => {
+    // 升级后未重启的窗口期：以数据目录中的状态为准，避免读到包内默认值并覆盖用户设置
+    try { await exec('if [ -f ' + DATA + '/onboarding.json ]; then cp -f ' + DATA + '/onboarding.json ' + ONBOARDING_FILE + '; fi'); } catch (e) {}
     try {
         const r = await fetch('onboarding.json?' + Date.now(), { cache: 'no-store' });
         if (r.ok) onboarding = { ...onboarding, ...(await r.json()) };
