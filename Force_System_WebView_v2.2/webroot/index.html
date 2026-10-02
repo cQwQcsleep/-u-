@@ -441,16 +441,9 @@ header {
 }
 .tag.dim { background: var(--card4); color: var(--fg2); }
 
-/* 未加入的应用行（扫描发现，可一键加入） */
+/* 未加入的应用行（扫描发现，点进详情后添加） */
 .arow.cand .tag.cand-t { background: color-mix(in srgb, var(--tert) 16%, transparent); color: var(--tert); }
-.arow.cand .atx { align-self: center; }
-.cand-add {
-    flex-shrink: 0; height: 32px; padding: 0 13px; border: 0; border-radius: 9px;
-    background: var(--pri-c); color: var(--on-pri-c);
-    font: 600 12px/1 inherit; cursor: pointer; transition: transform .12s;
-}
-.cand-add:active { transform: scale(.94); }
-.arow .dchip-wrap { margin-top: 6px; }
+.cand-arrow { width: 18px; height: 18px; flex-shrink: 0; opacity: .35; }
 .list-refresh {
     display: none; align-items: center; gap: 9px;
     padding: 10px 15px; margin-bottom: 8px; border-radius: 14px;
@@ -465,6 +458,7 @@ header {
 
 /* M3 开关 */
 .sw { position: relative; width: 50px; height: 30px; flex-shrink: 0; cursor: pointer; }
+.sw::before { content: ''; position: absolute; inset: -9px -8px; }
 .sw input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; z-index: 2; }
 .sw .tr {
     position: absolute; inset: 0; border-radius: 15px;
@@ -899,8 +893,7 @@ body.sheet-open .toast.show { transform: translateX(-50%) translateY(0); }
 .dchip.susp { background: color-mix(in srgb, var(--tert) 14%, transparent); color: var(--tert); }
 .dchip.susp.on { background: var(--tert); color: var(--bg); }
 .dchip.new { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
-.pick-ig { flex-shrink: 0; align-self: center; height: 30px; padding: 0 10px; border: none; border-radius: 9px; background: var(--card3); color: var(--fg2); font: 600 11.5px/1 inherit; cursor: pointer; transition: transform .12s; }
-.pick-ig:active { transform: scale(.94); }
+
 .scan-foot { display: flex; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--line2); flex-shrink: 0; }
 .sf-btn { flex: 1; height: 42px; border: 0; border-radius: 12px; font: 700 13.5px/1 inherit; cursor: pointer; transition: transform .12s; }
 .sf-btn:active { transform: scale(.97); }
@@ -910,51 +903,64 @@ body.sheet-open .toast.show { transform: translateX(-50%) translateY(0); }
 .bk-btn.ig { background: color-mix(in srgb, var(--pri) 14%, transparent); color: var(--pri); }
 
 /* 详情页 */
+/* 详情弹窗（80% 高度居中，点空白/返回键关闭） */
+.detail-scrim {
+    position: fixed; inset: 0; z-index: 111;
+    background: rgba(0, 0, 0, .42);
+    opacity: 0; pointer-events: none; transition: opacity .22s;
+}
+.detail-scrim.show { opacity: 1; pointer-events: auto; }
 .detail-page {
     position: fixed;
-    inset: 0;
-    z-index: 102;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%) scale(.92);
+    width: calc(100vw - 32px);
+    max-width: 520px;
+    height: 80vh;
+    z-index: 112;
     background: var(--bg);
-    transform: translateX(100%);
+    border-radius: 24px;
+    box-shadow: 0 12px 48px var(--sh);
+    opacity: 0;
     visibility: hidden;
     pointer-events: none;
-    transition: transform .35s cubic-bezier(.25, .8, .25, 1), visibility 0s .35s;
+    transition: opacity .2s ease, transform .26s cubic-bezier(.34, 1.2, .64, 1), visibility 0s .26s;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
 }
 .detail-page.show {
-    transform: translateX(0);
+    opacity: 1;
     visibility: visible;
     pointer-events: auto;
-    transition: transform .35s cubic-bezier(.25, .8, .25, 1);
+    transform: translate(-50%, -50%) scale(1);
+    transition: opacity .2s ease, transform .26s cubic-bezier(.34, 1.2, .64, 1);
 }
 .detail-header {
-    padding: 16px 16px 12px;
-    padding-top: calc(16px + var(--top-inset));
+    padding: 16px 16px 14px;
     border-bottom: 1px solid var(--line2);
     display: flex;
     align-items: center;
     gap: 12px;
     flex-shrink: 0;
 }
-.detail-back {
-    width: 36px;
-    height: 36px;
+.detail-close {
+    width: 34px;
+    height: 34px;
     border-radius: 50%;
     border: none;
-    background: var(--card2);
-    color: var(--fg);
-    font-size: 18px;
+    background: var(--card3);
+    color: var(--fg2);
+    font: 600 15px/1 inherit;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    transition: transform .12s, background .15s;
+    transition: transform .12s;
 }
-.detail-back:active {
-    transform: scale(.92);
-    background: var(--card3);
+.detail-close:active {
+    transform: scale(.9);
 }
 .detail-title-wrap {
     flex: 1;
@@ -1028,11 +1034,11 @@ body.sheet-open .toast.show { transform: translateX(-50%) translateY(0); }
 .detail-content {
     flex: 1;
     overflow-y: auto;
-    padding: 20px 16px;
-    padding-bottom: calc(20px + var(--bottom-inset) + 80px);
+    -webkit-overflow-scrolling: touch;
+    padding: 18px 16px 6px;
 }
 .detail-section {
-    margin-bottom: 24px;
+    margin-bottom: 20px;
 }
 .detail-section-title {
     font-size: 13px;
@@ -1076,21 +1082,15 @@ body.sheet-open .toast.show { transform: translateX(-50%) translateY(0); }
 }
 
 .detail-actions {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    padding: 16px;
-    padding-bottom: calc(16px + var(--bottom-inset));
-    background: var(--bg);
+    flex-shrink: 0;
+    padding: 12px 16px 16px;
     border-top: 1px solid var(--line2);
     display: flex;
     gap: 12px;
-    z-index: 97;
 }
 .detail-btn {
     flex: 1;
-    height: 52px;
+    height: 46px;
     border: none;
     border-radius: 14px;
     font: 600 15px/1 inherit;
@@ -1324,10 +1324,6 @@ body.sheet-open .toast.show { transform: translateX(-50%) translateY(0); }
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg>
                     <span class="top-menu-label" id="b-theme-t">自动</span>
                 </button>
-                <button class="top-menu-btn" id="b-ignored">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z"></path><circle cx="12" cy="12" r="2.5"></circle><path d="M4 20 20 4"></path></svg>
-                    <span class="top-menu-label">已忽略应用</span>
-                </button>
                 <button class="top-menu-btn" id="b-info">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 10v6M12 7h.01"></path></svg>
                     <span class="top-menu-label">关于</span>
@@ -1488,19 +1484,6 @@ body.sheet-open .toast.show { transform: translateX(-50%) translateY(0); }
     </div>
 </div>
 
-<!-- 已忽略应用 -->
-<div class="sheet" id="sh-ignored">
-    <div class="grab"></div>
-    <div class="shead">
-        <div class="t">已忽略应用</div>
-        <button class="x" data-x>✕</button>
-    </div>
-    <div class="sbody">
-        <div class="bk-hint">这些应用不会再出现在分析结果中。恢复后，下次分析会重新提示。</div>
-        <div id="ig-list"></div>
-    </div>
-</div>
-
 <!-- 文本弹层 -->
 <div class="sheet" id="sh-text">
     <div class="grab"></div>
@@ -1605,18 +1588,17 @@ body.sheet-open .toast.show { transform: translateX(-50%) translateY(0); }
     </div>
 </div>
 
-<!-- 三级详情页 -->
+<!-- 详情弹窗 -->
+<div class="detail-scrim" id="detail-scrim"></div>
 <div class="detail-page" id="detail-page">
     <div class="detail-header">
-        <button class="detail-back" id="detail-back">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-        </button>
         <div class="detail-icon" id="detail-icon"><img src="" alt="" onerror="this.style.display='none'"></div>
         <div class="detail-title-wrap">
             <div class="detail-title" id="detail-name">应用名称</div>
             <div class="detail-subtitle" id="detail-pkg">com.example.app</div>
             <div class="compat-tag full yellow" id="detail-compat">适配状态</div>
         </div>
+        <button class="detail-close" id="detail-back" aria-label="关闭">✕</button>
     </div>
     <div class="detail-content">
         <div class="detail-stats" id="detail-stats">
@@ -1934,7 +1916,6 @@ async function loadConfig() {
     const r = await fetch('config.json?' + Date.now());
     if (!r.ok) throw new Error('配置读取失败');
     config = await r.json();
-    if (!Array.isArray(config.ignored)) config.ignored = [];
 }
 async function loadStatus() {
     const r = await fetch('status.json?' + Date.now());
@@ -2036,20 +2017,34 @@ async function loadLight() {
     } catch (e) { return []; }
 }
 
+/* 后台执行轻量扫描并轮询结果，避免阻塞界面 */
 async function refreshLight(force) {
     if (lightBusy) return;
     if (!force && Date.now() - lightTs < 60000) return;
     lightBusy = true;
     const hint = $('list-refresh');
     if (hint) hint.classList.add('show');
-    try { await exec('sh ' + MDIR + '/scan.sh light'); } catch (e) {}
-    try {
-        lightData = await loadLight();
-        lightTs = Date.now();
-        renderList();
-    } catch (e) {}
+    const t0 = Date.now();
+    try { await exec('sh ' + MDIR + '/scan.sh light > /dev/null 2>&1 &'); } catch (e) {}
+    for (let i = 0; i < 50; i++) {
+        await new Promise(r => setTimeout(r, 220));
+        try {
+            const r = await fetch('scan-light.txt?' + Date.now(), { cache: 'no-store' });
+            if (!r.ok) continue;
+            const text = await r.text();
+            // 完整扫描占用锁时本轮跳过，沿用已有结果
+            const busyM = text.match(/^BUSY\|(\d+)$/m);
+            if (busyM && (+busyM[1] * 1000) > (t0 - 3000)) break;
+            const startedM = text.match(/^STARTED\|\d+\|(\d+)$/m);
+            if (!startedM || (+startedM[1] * 1000) <= (t0 - 3000)) continue;
+            if (/^DONE\|/m.test(text)) break;
+        } catch (e) {}
+    }
+    lightData = await loadLight();
+    lightTs = Date.now();
     lightBusy = false;
     if (hint) hint.classList.remove('show');
+    renderList();
 }
 
 /* 已安装清单未知（旧版 status.json）时不过滤，避免列表被清空 */
@@ -2077,68 +2072,13 @@ function listRows() {
 }
 
 function candRowHtml(r) {
-    const dirs = splitDirs(r.dirs);
-    let chips = dirs.slice(0, 3).map(d => '<span class="dchip">' + d + '</span>').join('');
-    if (dirs.length > 3) chips += '<span class="dchip">+' + (dirs.length - 3) + '</span>';
     return `
             <div class="aicon"><img src="ksu://icon/${r.pkg}" alt="" onerror="this.parentNode.classList.add('noimg')" loading="lazy"></div>
             <div class="atx">
-                <div class="aname"><span>${r.name}</span><span class="tag cand-t">未加入</span>${r.game ? '<span class="kernel-badge game"></span>' : ''}</div>
+                <div class="aname"><span>${r.name}</span><span class="tag cand-t">未加入</span></div>
                 <div class="apkg">${r.pkg}</div>
-                ${chips ? '<div class="dchip-wrap">' + chips + '</div>' : ''}
             </div>
-            <button class="cand-add">加入</button>`;
-}
-
-/* 长按进详情（与应用列表共用三级详情页） */
-function bindRowLongPress(row, pkg, active) {
-    let lpTimer = null, lpFired = false;
-    row.addEventListener('touchstart', (e) => {
-        lpFired = false;
-        lpTimer = setTimeout(async () => {
-            lpFired = true;
-            const st = (status && status.apps) || {};
-            const cfgInfo = config.apps[pkg] || {};
-            let dirs = (cfgInfo.dirs || []).join(' ');
-            let mstat = active ? '已生效' : '';
-            let bkmb = 0;
-            if (active) {
-                mstat = '已生效';
-                try {
-                    const r = await exec('du -sm ' + DATA + '/backup/' + pkg + ' 2>/dev/null | cut -f1');
-                    bkmb = parseInt((r || '').trim(), 10) || 0;
-                } catch (e2) {}
-            } else if (!dirs) {
-                // 未添加的应用：从上次扫描缓存取特征目录
-                try {
-                    const raw = localStorage.getItem('fsw_last_scan');
-                    const o = raw ? JSON.parse(raw) : null;
-                    const it = o && Array.isArray(o.data) ? o.data.find(x => x.pkg === pkg) : null;
-                    if (it) { dirs = it.dirs || ''; mstat = '未管理'; }
-                } catch (e2) {}
-            }
-            showDetail(pkg, active ? '已生效' : '未管控', dirs, mstat || '未管理', bkmb);
-            if (navigator.vibrate) navigator.vibrate(15);
-        }, 500);
-    }, { passive: true });
-    const lpCancel = () => { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } };
-    row.addEventListener('touchend', lpCancel);
-    row.addEventListener('touchmove', lpCancel);
-    row.addEventListener('touchcancel', lpCancel);
-    row.addEventListener('contextmenu', (e) => { if (lpFired) e.preventDefault(); });
-}
-
-async function addCandidateApp(pkg, dirsStr) {
-    const dirs = splitDirs(dirsStr);
-    if (!dirs.length) { toast('该应用无可加入目录', true); return; }
-    try {
-        await loadConfig();
-        if (config.apps[pkg]) { toast('已在列表中'); return; }
-        config.apps[pkg] = { name: appName(pkg), enabled: false, dirs: dirs };
-        await saveConfig();
-        renderList();
-        toast('已加入「' + appName(pkg) + '」，打开开关并保存后生效');
-    } catch (e) { toast('加入失败：' + e.message, true); }
+            <svg class="cand-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>`;
 }
 
 function renderList() {
@@ -2175,10 +2115,6 @@ function renderList() {
         if (r.kind === 'cand') {
             row.innerHTML = candRowHtml(r);
             row.addEventListener('click', () => showDetail(r.pkg, '未管控', r.dirs, '未管理', 0));
-            row.querySelector('.cand-add').addEventListener('click', (e) => {
-                e.stopPropagation();
-                addCandidateApp(r.pkg, r.dirs);
-            });
         } else {
             row.innerHTML = `
             <div class="aicon"><img src="ksu://icon/${r.pkg}" alt="" onerror="this.parentNode.classList.add('noimg')" loading="lazy"></div>
@@ -2190,8 +2126,11 @@ function renderList() {
                 <input type="checkbox" data-pkg="${r.pkg}" ${r.active ? 'checked' : ''} data-init="${r.active}">
                 <span class="tr"></span><span class="th"></span>
             </label>`;
-            row.addEventListener('click', () => row.querySelector('input').click());
-            bindRowLongPress(row, r.pkg, r.active);
+            // 整行点击进详情，只有开关本身切换状态
+            row.addEventListener('click', () => {
+                const cfgInfo = config.apps[r.pkg] || {};
+                showDetail(r.pkg, r.active ? '已生效' : '未管控', (cfgInfo.dirs || []).join(' '), r.active ? '已生效' : '未管理', 0);
+            });
             row.querySelector('input').addEventListener('change', () => {
                 row.classList.remove('flash');
                 requestAnimationFrame(() => requestAnimationFrame(() => row.classList.add('flash')));
@@ -2570,7 +2509,7 @@ async function loadKsuAppLabels(items) {
 const COMPAT_RANK = { red: 0, yellow: 1, green: 2 };
 const byCompatDesc = (a, b) => (COMPAT_RANK[getCompat(a.pkg)] ?? 2) - (COMPAT_RANK[getCompat(b.pkg)] ?? 2);
 
-/* 分析结果：勾选状态与加入/合并/忽略操作 */
+/* 分析结果：勾选状态与加入/合并操作 */
 let curScanData = null;
 let scanPick = null;
 const splitDirs = s => String(s || '').split(/\s+/).filter(Boolean);
@@ -2613,7 +2552,6 @@ function pickCardHtml(it) {
         '<div class="pkg">' + it.pkg + '</div>' +
         '<div class="dchip-wrap">' + chips + '</div>' +
         '</div>' +
-        '<button class="pick-ig">忽略</button>' +
         '</div>';
 }
 
@@ -2683,10 +2621,6 @@ function renderScanResult(scanData) {
                 else { s.susp.add(d); chip.classList.add('on'); }
                 if (!s.on) setOn(true); else syncScanFoot();
             });
-        });
-        card.querySelector('.pick-ig').addEventListener('click', e => {
-            e.stopPropagation();
-            ignoreApp(pkg, s.kind);
         });
         card.addEventListener('click', () => {
             const dirsStr = s.kind === 'add' ? it.newDirs : [...s.dirs, ...s.susp].join(' ');
@@ -2807,26 +2741,6 @@ async function mergeSelectedDirs() {
     }
 }
 
-async function ignoreApp(pkg, kind) {
-    try {
-        await loadConfig();
-        if (!Array.isArray(config.ignored)) config.ignored = [];
-        if (!config.ignored.includes(pkg)) config.ignored.push(pkg);
-        await saveConfig();
-        if (kind === 'cand') {
-            curScanData = curScanData.filter(x => x.pkg !== pkg);
-        } else {
-            const it = curScanData.find(x => x.pkg === pkg);
-            if (it) it.newDirs = '';
-        }
-        persistScanCache();
-        renderScanResult(curScanData);
-        toast('已忽略「' + appName(pkg) + '」，可在顶部菜单恢复');
-    } catch (e) {
-        toast('忽略失败：' + e.message, true);
-    }
-}
-
 $('b-scan-add').addEventListener('click', addSelectedApps);
 $('b-scan-merge').addEventListener('click', mergeSelectedDirs);
 
@@ -2912,6 +2826,13 @@ function showDetail(pkg, kernel, dirsStr, mstat, bkmb) {
     $('ds-kernel').textContent = kshort;
     $('ds-dirs').textContent = dirs.length;
     $('ds-bk').textContent = bkmb ? bkmb + ' MB' : '—';
+    if (mstat === '已生效' && !bkmb) {
+        // 备份体积异步补全，避免阻塞弹窗打开
+        exec('du -sm ' + DATA + '/backup/' + pkg + ' 2>/dev/null | cut -f1').then(r => {
+            const mb = parseInt((r || '').trim(), 10) || 0;
+            if (mb && $('detail-pkg').textContent === pkg) $('ds-bk').textContent = mb + ' MB';
+        }).catch(() => {});
+    }
 
     let kbClass = 'partial';
     if (mstat === '已生效') kbClass = 'mstate';
@@ -3000,15 +2921,23 @@ function showDetail(pkg, kernel, dirsStr, mstat, bkmb) {
     };
 
     detailPage.classList.add('show');
-    const closeDetail = () => detailPage.classList.remove('show');
-    backPush(closeDetail);
+    $('detail-scrim').classList.add('show');
+    backPush(hideDetail);
 }
 
-$('detail-back').addEventListener('click', () => {
-    const i = backStack.findIndex(f => f.toString().includes('detailPage'));
+function hideDetail() {
+    $('detail-page').classList.remove('show');
+    $('detail-scrim').classList.remove('show');
+}
+
+function closeDetailByUser() {
+    const i = backStack.findIndex(f => f === hideDetail || f.toString().includes('hideDetail'));
     if (i >= 0) backStack.splice(i, 1)[0]();
-    else $('detail-page').classList.remove('show');
-});
+    else hideDetail();
+}
+
+$('detail-back').addEventListener('click', closeDetailByUser);
+$('detail-scrim').addEventListener('click', closeDetailByUser);
 
 let legendTimer = null;
 function clearLegendTimer() {
@@ -3108,49 +3037,7 @@ $('scrim').addEventListener('click', (e) => {
 
 /* 关于 / 日志 */
 $('b-info').addEventListener('click', () => openSheet('sh-about'));
-$('b-ignored').addEventListener('click', () => { topMenu.classList.remove('open'); openIgnored(); });
 $('card-bk').addEventListener('click', openBkManager);
-
-async function openIgnored() {
-    const list = $('ig-list');
-    list.innerHTML = '<div class="loadbox spin">读取中…</div>';
-    openSheet('sh-ignored');
-    try {
-        await loadConfig();
-        const arr = config.ignored || [];
-        if (!arr.length) {
-            list.innerHTML = '<div class="bk-hint">暂无已忽略的应用。</div>';
-            return;
-        }
-        const cacheMap = {};
-        try {
-            const o = JSON.parse(localStorage.getItem('fsw_last_scan') || 'null');
-            (o && Array.isArray(o.data) ? o.data : []).forEach(x => { cacheMap[x.pkg] = x; });
-        } catch (e) {}
-        list.innerHTML = arr.map(pkg => {
-            const it = cacheMap[pkg];
-            const dirs = it ? (it.dirs || '') : '';
-            return '<div class="bk-item" data-pkg="' + pkg + '">' +
-                '<div class="bk-tx"><div class="bk-nm">' + appName(pkg) + '</div>' +
-                '<div class="bk-sz">' + pkg + (dirs ? ' · ' + dirs : '') + '</div></div>' +
-                '<button class="bk-btn ig">恢复</button></div>';
-        }).join('');
-        list.querySelectorAll('.bk-item').forEach(item => {
-            item.querySelector('.ig').onclick = async () => {
-                try {
-                    await loadConfig();
-                    config.ignored = (config.ignored || []).filter(p => p !== item.dataset.pkg);
-                    await saveConfig();
-                    item.remove();
-                    if (!config.ignored.length) list.innerHTML = '<div class="bk-hint">暂无已忽略的应用。</div>';
-                    toast('已恢复，下次分析会重新提示');
-                } catch (e) { toast('恢复失败：' + e.message, true); }
-            };
-        });
-    } catch (e) {
-        list.innerHTML = '<div class="bk-hint">读取失败：' + e.message + '</div>';
-    }
-}
 
 async function openBkManager() {
     const list = $('bk-list');

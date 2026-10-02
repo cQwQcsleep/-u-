@@ -19,9 +19,7 @@ CONFIG=/data/adb/force_webview/config.json
 MODROOT=/data/adb/force_webview/backup
 TMP=/data/adb/force_webview/.scan-cfg
 PKGS=/data/adb/force_webview/.scan-pkgs
-IGN=/data/adb/force_webview/.scan-ign
 TPL_TMP=/data/adb/force_webview/.scan-tpl
-IGN_LIST=""
 TPL_PKGS=""
 TPL_DATA=""
 TAB=$(printf '\t')
@@ -43,7 +41,7 @@ if ! mkdir "$LOCK" 2>/dev/null; then
     exit 1
 fi
 echo $$ > "$LOCK/pid"
-trap 'rm -f "$PKGS" "$IGN" "$TPL_TMP" 2>/dev/null; rm -rf "$LOCK" 2>/dev/null' EXIT
+trap 'rm -f "$PKGS" "$TPL_TMP" 2>/dev/null; rm -rf "$LOCK" 2>/dev/null' EXIT
 
 # config -> pkg<TAB>enabled<TAB>name<TAB>dirs
 [ -f "$CONFIG" ] && awk '
@@ -77,19 +75,6 @@ trap 'rm -f "$PKGS" "$IGN" "$TPL_TMP" 2>/dev/null; rm -rf "$LOCK" 2>/dev/null' E
     }
     END { emit() }
 ' "$CONFIG" > "$TMP" 2>/dev/null || : > "$TMP"
-
-# config ignored 数组 -> 忽略列表（这些应用不再出现在分析结果中）
-: > "$IGN"
-[ -f "$CONFIG" ] && awk '
-    /^  "ignored": \[/ { ing = 1; next }
-    ing && /^[ ]*\]/ { ing = 0; next }
-    ing {
-        s = $0
-        gsub(/^[ ]*"/, "", s); gsub(/",?[ ]*$/, "", s)
-        if (s != "") print s
-    }
-' "$CONFIG" >> "$IGN" 2>/dev/null
-[ -s "$IGN" ] && IGN_LIST=$(tr '\n' ' ' < "$IGN")
 
 # templates.json（目录模板）-> pkg<TAB>dirs
 : > "$TPL_TMP"
@@ -257,12 +242,9 @@ while IFS= read -r pkg; do
     [ -z "$hits" ] && continue
 
     gtag=$(is_game "$pkg")
-    ignored=0
-    case " $IGN_LIST " in *" $pkg "*) ignored=1;; esac
 
     if [ "$SCAN_MODE" = "light" ]; then
         # 轻量模式只输出「尚未加入管控」的可管控应用，已配置的由前端用配置渲染
-        [ "$ignored" = "1" ] && continue
         awk -F'\t' -v p="$pkg" '$1==p{found=1} END{exit !found}' "$TMP" 2>/dev/null && continue
         u=$((u+1))
         echo "$pkg||未管理|$hits|$gtag|0||" >> "$OUT"
@@ -273,14 +255,10 @@ while IFS= read -r pkg; do
 
     if [ "$cfgdirs" != "<<NA>>" ]; then
         m=$((m+1))
-        # 已配置应用：只提示 config 之外的新增目录；被忽略的应用不再提示
-        nd=""
-        if [ "$ignored" = "0" ]; then
-            nd=$(diff_dirs "$hits" "$cfgdirs")
-        fi
+        # 已配置应用：只提示 config 之外的新增目录
+        nd=$(diff_dirs "$hits" "$cfgdirs")
         echo "$pkg|未管控|已配置|$hits|$gtag|0||$nd" >> "$OUT"
     else
-        [ "$ignored" = "1" ] && continue
         u=$((u+1))
         kernel=$(check_kernel "$d" "$hits")
         susp=$(check_suspicious "$d" "$pkg" "$hits")
@@ -297,9 +275,7 @@ if [ "$SCAN_MODE" = "full" ]; then
         [ -z "$bk" ] && bk=0
         gtag=$(is_game "$pkg")
         nd=""
-        ignored=0
-        case " $IGN_LIST " in *" $pkg "*) ignored=1;; esac
-        if [ "$ignored" = "0" ] && [ -d "/data/data/$pkg" ]; then
+        if [ -d "/data/data/$pkg" ]; then
             h=$(collect_dirs "/data/data/$pkg" "$pkg")
             [ -n "$h" ] && nd=$(diff_dirs "$h" "$dirs")
         fi
@@ -308,5 +284,7 @@ if [ "$SCAN_MODE" = "full" ]; then
     done
 
     rm -f "$TMP"
-    echo "DONE|$u|$m" >> "$OUT"
 fi
+
+# 两种模式都由前端轮询 DONE 判断结束
+echo "DONE|$u|$m" >> "$OUT"
