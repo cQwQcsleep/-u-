@@ -1,0 +1,3158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" id="meta-theme" content="#FAF8FF">
+<link rel="stylesheet" href="/internal/insets.css">
+<title>内核管控</title>
+<style>
+/* 配色 */
+:root {
+    --pri: #4F5B92;
+    --on-pri: #FFFFFF;
+    --pri-c: #DDE1FF;
+    --on-pri-c: #001159;
+    --tert: #75546F;
+    --err: #904A43;
+    --on-err: #FFFFFF;
+    --err-c: #FFDAD5;
+    --on-err-c: #3B0907;
+    --bg: #FAF8FF;
+    --fg: #1A1B21;
+    --fg2: #45464F;
+    --line: #767680;
+    --line2: #C7C5D0;
+    --card: #EDEFF7;
+    --card2: #E6E9F3;
+    --card3: #E0E3EF;
+    --card4: #D9DDEA;
+    --sh: rgba(26, 27, 33, .16);
+    --ok: #3F6838;
+    --scan: #5D6B85;
+    --on-scan: #F2F4F9;
+    --top-inset: var(--window-inset-top, env(safe-area-inset-top, 0px));
+    --bottom-inset: var(--window-inset-bottom, env(safe-area-inset-bottom, 0px));
+}
+.dark {
+    --pri: #BAC3FF;
+    --on-pri: #08218A;
+    --pri-c: #2A3E7D;
+    --on-pri-c: #DDE1FF;
+    --tert: #E3BBDA;
+    --err: #FFB4A9;
+    --on-err: #530F08;
+    --err-c: #6E322A;
+    --on-err-c: #FFDAD5;
+    --bg: #121317;
+    --fg: #E3E1E9;
+    --fg2: #C7C5D0;
+    --line: #96989F;
+    --line2: #4B4B53;
+    --card: #1A1B21;
+    --card2: #1F1F25;
+    --card3: #292A30;
+    --card4: #34343A;
+    --sh: rgba(0, 0, 0, .5);
+    --ok: #A6D398;
+    --scan: #46536E;
+    --on-scan: #E8EBF4;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+/* 全局统一为概览标题的字形与字重，避免控件间粗细不一致。 */
+body, body button, body input, body textarea, body select {
+    font-family: -apple-system, 'HarmonyOS Sans SC', 'MiSans', 'PingFang SC', 'Noto Sans SC', sans-serif !important;
+    font-weight: 700 !important;
+}
+html, body { height: 100%; }
+body {
+    font-family: -apple-system, 'HarmonyOS Sans SC', 'MiSans', 'PingFang SC', 'Noto Sans SC', sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.45;
+    transition: background .25s, color .25s;
+}
+
+/* 顶栏 */
+header {
+    padding-top: var(--top-inset);
+    background: transparent;
+    position: relative; z-index: 10; flex-shrink: 0;
+}
+.topbar { display: flex; align-items: center; height: 60px; padding: 0 10px 0 18px; gap: 10px; }
+.topbar .name { font-size: 20px; font-weight: 600; letter-spacing: .2px; }
+.topbar .chip {
+    font-size: 11px; font-weight: 600; padding: 3px 10px;
+    border-radius: 9px; background: var(--card3); color: var(--fg2);
+}
+.topbar .grow { flex: 1; }
+.top-menu {
+    position: relative; z-index: 30;
+}
+.top-menu-trigger {
+    width: 40px; height: 40px; border: none; border-radius: 12px;
+    background: color-mix(in srgb, var(--fg) 8%, transparent); color: var(--fg);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: transform .2s cubic-bezier(.34,1.4,.64,1), background .15s;
+}
+.top-menu-trigger:active { transform: scale(.92); background: var(--card4); }
+.top-menu-trigger .ticon-dots { transition: transform .26s cubic-bezier(.34,1.2,.64,1); }
+.top-menu.open .ticon-dots { transform: rotate(90deg); }
+.ticon-dots { display: flex; flex-direction: column; gap: 3px; flex-shrink: 0; }
+.ticon-dots i { width: 4px; height: 4px; border-radius: 50%; background: currentColor; display: block; }
+.top-menu-panel {
+    position: absolute; top: 48px; right: 0;
+    display: flex; flex-direction: column; gap: 7px;
+    width: 126px; padding: 8px;
+    border-radius: 17px; background: var(--card);
+    box-shadow: 0 12px 40px rgba(0,0,0,.22), 0 2px 8px rgba(0,0,0,.1);
+    opacity: 0; transform: translateY(-10px) scale(.92);
+    transform-origin: top right; pointer-events: none;
+    transition: opacity .2s, transform .26s cubic-bezier(.34,1.3,.64,1);
+}
+.top-menu.open .top-menu-panel { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
+.top-menu-btn {
+    height: 38px; padding: 0 11px; border: none; border-radius: 10px;
+    background: var(--card2); color: var(--fg); cursor: pointer;
+    display: flex; align-items: center; gap: 9px;
+    font: 750 12.5px/1 inherit; text-align: left;
+    transition: transform .12s, background .15s;
+}
+.top-menu-btn:active { transform: scale(.96); background: var(--card3); }
+.top-menu-btn svg { width: 18px; height: 18px; color: var(--pri); flex-shrink: 0; }
+.top-menu-btn .top-menu-label { flex: 1; }
+.top-menu-btn #b-theme-t { color: var(--fg2); }
+
+/* 分段 Tab */
+.seg {
+    display: flex; margin: 0 16px; height: 44px;
+    background: var(--card2); border-radius: 13px; padding: 4px; gap: 4px;
+}
+.seg button {
+    flex: 1; border: none; border-radius: 9px; cursor: pointer;
+    background: transparent; color: var(--fg2);
+    font: 600 14px/1 inherit; user-select: none;
+    transition: background .18s, color .18s, box-shadow .18s;
+}
+.seg button.on {
+    background: var(--bg); color: var(--fg);
+    font-weight: 600;
+    box-shadow: 0 1px 5px var(--sh);
+}
+
+/* 页面 */
+.pager { flex: 1; overflow: hidden; position: relative; }
+.page {
+    position: absolute; inset: 0;
+    overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+    padding: 14px 16px calc(32px + var(--bottom-inset));
+    opacity: 0; pointer-events: none;
+    transform: translateX(14px);
+    transition: opacity .2s, transform .22s cubic-bezier(.4,0,.2,1);
+}
+.page.on { opacity: 1; pointer-events: auto; transform: translateX(0); }
+.page.leaving { transform: translateX(-14px); }
+
+/* 概览 */
+.hero {
+    position: relative; overflow: hidden;
+    min-height: 0;
+    padding: 18px 20px 14px; border-radius: 16px;
+    background: var(--card);
+    margin-bottom: 12px;
+    transition: background .25s, transform .15s;
+}
+.hero.unlock-target { cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; }
+.hero.unlock-target.pressing { transform: scale(.985); background: var(--card2); }
+.hero.unlock-target.hit { animation: heroTap .22s ease; }
+@keyframes heroTap { 0% { transform: scale(1); } 45% { transform: scale(.985); background: var(--card2); } 100% { transform: scale(1); } }
+.hero .big { font-size: 33px; font-weight: 700; line-height: 1.22; letter-spacing: -.4px; white-space: nowrap; overflow: visible; word-break: normal; }
+.hero .sub { font-size: 17px; color: var(--fg2); margin-top: 10px; line-height: 1.4; }
+.hero::before { content: ''; position: absolute; left: 0; top: 14px; bottom: 14px; width: 4px; border-radius: 2px; background: var(--pri); }
+
+.grid { display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; gap: 10px; margin-bottom: 10px; }
+.gitem {
+    background: var(--card); border-radius: 16px; padding: 14px 16px;
+    display: flex; flex-direction: column; justify-content: space-between; gap: 12px;
+    min-height: 88px;
+    transition: background .25s, transform .15s;
+}
+.gitem:active { transform: scale(.97); }
+.gitem .cap { font-size: 16px; font-weight: 700; color: var(--fg); line-height: 1.2; }
+.gitem .val { font-size: 12.5px; font-weight: 700; line-height: 1.35; color: var(--fg2); word-break: break-all; }
+.gitem.hl { background: var(--pri-c); }
+.gitem.hl .cap { color: var(--on-pri-c); }
+.gitem.hl .val { color: color-mix(in srgb, var(--on-pri-c) 72%, transparent); font-size: 12.5px; }
+
+/* 实验性功能 */
+.experimental-tools {
+    display: none; margin: 0 0 12px;
+    padding: 12px; border-radius: 15px;
+    background: color-mix(in srgb, var(--err) 8%, var(--card));
+    border: 1px solid color-mix(in srgb, var(--err) 24%, transparent);
+}
+.experimental-tools.show { display: block; animation: expin .28s cubic-bezier(.34,1.3,.64,1); }
+@keyframes expin { from { opacity: 0; transform: translateY(-8px) scale(.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.experimental-title {
+    display: flex; align-items: center; gap: 7px;
+    margin: 1px 2px 9px; color: var(--err);
+    font-size: 11px; font-weight: 700; letter-spacing: .45px;
+}
+.experimental-title::before { content: ''; width: 11px; height: 11px; border-radius: 50%; background: currentColor; }
+.experimental-desc { margin: 0 2px 11px; color: var(--fg2); font-size: 12px; line-height: 1.45; }
+.experimental-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.experimental-btn {
+    height: 40px; border: none; border-radius: 11px; cursor: pointer;
+    background: var(--card2); color: var(--fg); font: 750 12.5px/1 inherit;
+    transition: transform .12s, background .15s, opacity .2s;
+}
+.experimental-btn.primary { background: var(--err); color: var(--on-err); }
+.experimental-btn:active { transform: scale(.96); }
+.experimental-btn:disabled { opacity: .5; pointer-events: none; }
+.experimental-btn.last { display: none; }
+.experimental-btn.last.show { display: block; background: var(--pri); color: var(--on-pri); }
+
+.fireworks {
+    position: fixed; inset: 0; z-index: 200; pointer-events: none;
+    display: none; overflow: hidden;
+    background: radial-gradient(circle at center, color-mix(in srgb, var(--pri) 30%, transparent), rgba(0,0,0,.68));
+}
+.fireworks.show { display: block; animation: firebg 1.8s ease-out forwards; }
+@keyframes firebg { from { opacity: 0; } 12%,78% { opacity: 1; } to { opacity: 0; } }
+.firework-particle {
+    position: absolute; left: 50%; top: 50%; width: 11px; height: 11px; border-radius: 50%;
+    background: var(--fc); box-shadow: 0 0 10px 3px var(--fc), 0 0 30px 8px color-mix(in srgb, var(--fc) 55%, transparent);
+    animation: burst 1.55s cubic-bezier(.08,.65,.25,1) forwards;
+}
+@keyframes burst { from { transform: translate(-50%,-50%) scale(.35); opacity: 1; } 72% { opacity: 1; } to { transform: translate(calc(-50% + var(--x)),calc(-50% + var(--y))) scale(0); opacity: 0; } }
+.fireworks-message {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%) scale(.86);
+    width: calc(100% - 48px); text-align: center; opacity: 0;
+    color: #fff; font-size: 22px; font-weight: 700; letter-spacing: .4px;
+    text-shadow: 0 2px 18px rgba(0,0,0,.45);
+    animation: firemsg 1.8s cubic-bezier(.34,1.2,.64,1) forwards;
+}
+.fireworks-message small { display: block; margin-top: 8px; font-size: 13px; font-weight: 500; letter-spacing: 0; }
+@keyframes firemsg { 0%,12% { opacity: 0; transform: translate(-50%,-50%) scale(.86); } 32%,75% { opacity: 1; transform: translate(-50%,-50%) scale(1); } 100% { opacity: 0; transform: translate(-50%,-50%) scale(1.04); } }
+.store {
+    background: var(--card); border-radius: 16px; padding: 14px 16px;
+    margin-bottom: 10px;
+    transition: background .25s;
+}
+.store.tappable { cursor: pointer; transition: background .15s; }
+.store.tappable:active { background: var(--card2); }
+.store .row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; gap: 10px; }
+.store .cap { font-size: 13px; font-weight: 600; }
+.store .pct { font-size: 12.5px; font-weight: 700; color: var(--pri); font-variant-numeric: tabular-nums; }
+.store .val { font-size: 16px; font-weight: 600; margin: 2px 0 10px; }
+.bar { height: 12px; border-radius: 6px; background: var(--card4); overflow: hidden; }
+.bar i {
+    display: block; height: 100%; border-radius: 6px;
+    background: linear-gradient(90deg, var(--pri), color-mix(in srgb, var(--pri) 60%, var(--tert)));
+    transition: width .55s cubic-bezier(.34,1.3,.64,1);
+}
+.bar.bk i { background: linear-gradient(90deg, var(--tert), color-mix(in srgb, var(--tert) 60%, var(--pri))); min-width: 4px; }
+
+/* 首页常驻使用须知 */
+.home-disclaimer {
+    margin-top: 12px; padding: 4px 0 0;
+    background: transparent; border: 0;
+    border-radius: 0;
+}
+.home-disclaimer-title {
+    font-size: 16px; line-height: 1.25; color: var(--fg); margin-bottom: 10px;
+}
+.home-disclaimer-body {
+    font-size: 12.5px; line-height: 1.7; color: var(--fg2);
+}
+.home-disclaimer-body b { color: var(--fg); }
+
+/* 应用页 */
+.fab-area {
+    position: fixed;
+    right: 18px; bottom: 90px;
+    z-index: 89;
+    opacity: 0; transform: scale(.8) translateY(14px);
+    pointer-events: none;
+    transition: opacity .28s cubic-bezier(.4,0,.2,1), transform .32s cubic-bezier(.34,1.2,.64,1);
+}
+.fab-add { pointer-events: auto; }
+/* FAB 仅在应用页显示；初始状态与 Tab 切换共用同一个 class，避免首次进入应用页时遗漏显示。 */
+.fab-area.app-visible {
+    opacity: 1; display: block;
+    transform: scale(1) translateY(0);
+    pointer-events: auto;
+}
+.fab-add {
+    position: relative;
+    width: 62px; height: 62px; border-radius: 50%;
+    border: none; cursor: pointer;
+    background: var(--pri); color: var(--on-pri);
+    display: flex; align-items: center; justify-content: center;
+    transition: transform .2s cubic-bezier(.34,1.4,.64,1), box-shadow .2s;
+    box-shadow: 0 8px 24px color-mix(in srgb, var(--pri) 45%, transparent), 0 2px 8px rgba(0,0,0,.15);
+    margin-left: auto;
+}
+.fab-add:active { transform: scale(.92); }
+.fab-add .fab-plus { transition: transform .3s cubic-bezier(.34,1.2,.64,1); }
+.fab-area.open .fab-plus { transform: rotate(45deg); }
+
+.fab-panel {
+    display: flex; flex-direction: column;
+    gap: 8px;
+    width: 224px;
+    margin-bottom: 12px;
+    background: var(--card);
+    border-radius: 20px;
+    padding: 10px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.28), 0 2px 8px rgba(0,0,0,.12);
+    opacity: 0; transform: translateY(16px) scale(.92);
+    pointer-events: none;
+    transform-origin: bottom right;
+    transition: opacity .22s, transform .26s cubic-bezier(.34,1.3,.64,1);
+}
+.fab-area.open .fab-panel {
+    opacity: 1; transform: translateY(0) scale(1);
+    pointer-events: auto;
+}
+.fbtn {
+    height: 44px; border: none; border-radius: 12px; cursor: pointer;
+    background: var(--card2); color: var(--fg);
+    font: 600 13px/1 inherit;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 16px;
+    transition: transform .12s, background .15s;
+}
+.fbtn .ft { flex: 1; text-align: left; }
+.fbtn svg { opacity: .8; flex-shrink: 0; }
+.fbtn:active { transform: scale(.96); background: var(--card3); }
+.fbtn.ok { background: var(--pri); color: var(--on-pri); }
+.fbtn.ok:active { background: color-mix(in srgb, var(--pri) 88%, black); }
+.fbtn.danger { background: color-mix(in srgb, var(--err) 12%, transparent); color: var(--err); }
+.fbtn.danger svg { opacity: 1; }
+@keyframes rot { to { transform: rotate(360deg); } }
+/* spinner: 绝对定位不占布局，scale+opacity 弹入弹出，按钮宽度恒定 */
+.fbtn .fbtn-ic { transition: opacity .2s; }
+.fbtn.loading .fbtn-ic { display: none; }
+.fbtn .fab-spin {
+    width: 14px; height: 14px; border-radius: 50%;
+    border: 2.5px solid color-mix(in srgb, var(--on-pri) 30%, transparent);
+    border-top-color: var(--on-pri);
+    opacity: 0; display: none; box-sizing: border-box;
+    transition: opacity .2s;
+    flex-shrink: 0;
+}
+.fbtn.loading .fab-spin {
+    opacity: 1; display: block;
+    animation: fabrot .8s linear infinite;
+}
+@keyframes fabrot { to { transform: rotate(360deg); } }
+.apply-fab #b-apply-t {
+    transition: transform .28s cubic-bezier(.4,0,.2,1);
+}
+.apply-fab.loading #b-apply-t {
+    transform: translateX(13px);
+}
+/* 待应用红点 */
+.fab-add::after {
+    content: '';
+    position: absolute; top: 5px; right: 5px;
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--err);
+    opacity: 0; transform: scale(0);
+    transition: opacity .25s, transform .25s cubic-bezier(.34,1.5,.64,1);
+}
+.fab-add.dirty::after {
+    opacity: 1; transform: scale(1);
+}
+
+.quick { display: flex; gap: 8px; margin-bottom: 12px; }
+.qbtn {
+    flex: 1; height: 40px; border: none; border-radius: 12px; cursor: pointer;
+    background: var(--card2); color: var(--fg);
+    font: 600 13px/1 inherit;
+    display: flex; align-items: center; justify-content: center;
+    user-select: none; transition: transform .12s, background .15s, opacity .2s;
+}
+.qbtn:active { transform: scale(.95); background: var(--card4); }
+.qbtn:disabled { opacity: .5; pointer-events: none; }
+.qbtn.danger { color: var(--err); }
+
+.searchbox {
+    display: flex; align-items: center; gap: 10px;
+    height: 46px; padding: 0 16px; margin-bottom: 12px;
+    background: var(--card2); border-radius: 14px;
+    transition: background .25s, box-shadow .2s;
+}
+.searchbox:focus-within { box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--pri) 45%, transparent); }
+.searchbox input {
+    flex: 1; border: none; background: transparent; outline: none;
+    font: 500 14px inherit; color: var(--fg);
+}
+.searchbox input::placeholder { color: var(--fg2); opacity: .85; }
+
+#pg1 { overflow: hidden; display: flex; flex-direction: column; }
+#pg1 { padding-bottom: calc(8px + var(--bottom-inset)); }
+#pg1 .experimental-tools, #pg1 .searchbox { flex: 0 0 auto; }
+#pg1 .applist {
+    flex: 1 1 0; height: 0; min-height: 0;
+    overflow-y: scroll; overflow-x: hidden;
+    -webkit-overflow-scrolling: touch; overscroll-behavior: contain; touch-action: pan-y;
+    padding-bottom: calc(16px + var(--bottom-inset));
+    background: var(--card); border-radius: 16px; transition: background .25s;
+}
+.arow {
+    display: flex; align-items: center; gap: 14px;
+    padding: 13px 16px; cursor: pointer; position: relative;
+    min-height: 54px;
+}
+.arow.flash { animation: rowflash .6s ease; }
+@keyframes rowflash { 0% { background: color-mix(in srgb, var(--pri) 14%, transparent); } 100% { background: transparent; } }
+.arow:active { background: color-mix(in srgb, var(--fg) 7%, transparent); }
+.arow + .arow::before {
+    content: ''; position: absolute; top: 0; left: 72px; right: 0; height: 1px;
+    background: color-mix(in srgb, var(--line2) 55%, transparent);
+}
+.arow.hide { display: none; }
+.aicon {
+    width: 42px; height: 42px; border-radius: 50%; flex-shrink: 0;
+    background: var(--card3); overflow: hidden;
+}
+.aicon img { width: 42px; height: 42px; object-fit: cover; border-radius: 50%; display: block; }
+.aicon.noimg { display: none; }
+.aicon.noimg + .atx { margin-left: 4px; }
+.atx { flex: 1; min-width: 0; }
+.aname { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.apkg {
+    font-size: 11px; color: var(--fg2);
+    font-family: ui-monospace, Menlo, Consolas, Droid Sans Mono, monospace;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 3px;
+}
+.tag {
+    font-size: 10.5px; font-weight: 600; padding: 2.5px 8px; border-radius: 7px;
+    background: var(--pri-c); color: var(--on-pri-c);
+    flex-shrink: 0; line-height: 1.2;
+}
+.tag.dim { background: var(--card4); color: var(--fg2); }
+
+/* M3 开关 */
+.sw { position: relative; width: 50px; height: 30px; flex-shrink: 0; cursor: pointer; }
+.sw input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; z-index: 2; }
+.sw .tr {
+    position: absolute; inset: 0; border-radius: 15px;
+    border: 2px solid var(--line); background: var(--card4);
+    transition: all .2s cubic-bezier(.4,0,.2,1);
+}
+.sw .th {
+    position: absolute; left: 7px; top: 50%; width: 14px; height: 14px; border-radius: 50%;
+    transform: translateY(-50%); background: var(--line);
+    transition: all .2s cubic-bezier(.34,1.4,.64,1);
+}
+.sw input:checked + .tr { background: var(--pri); border-color: var(--pri); }
+.sw input:checked + .tr + .th {
+    left: 25px; width: 22px; height: 22px; background: var(--on-pri);
+    box-shadow: 0 0 0 2.5px var(--pri);
+}
+.sw input:disabled + .tr { opacity: .4; }
+.sw input:disabled + .tr + .th { opacity: .4; }
+
+/* 弹层 */
+.scrim {
+    position: fixed; inset: 0; z-index: 90;
+    background: rgba(0, 0, 0, .42);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    opacity: 0; pointer-events: none; transition: opacity .25s;
+}
+.scrim.show { opacity: 1; pointer-events: auto; }
+.sheet {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 91;
+    max-height: 76vh;
+    height: fit-content;
+    background: var(--bg); border-radius: 24px 24px 0 0;
+    transform: translateY(105%);
+    visibility: hidden;
+    pointer-events: none;
+    transition: transform .3s cubic-bezier(.32,.72,0,1), visibility 0s .3s;
+    display: flex; flex-direction: column;
+    padding-bottom: var(--bottom-inset);
+    box-shadow: 0 -6px 30px rgba(0,0,0,.18);
+}
+.sheet.show {
+    visibility: visible;
+    pointer-events: auto;
+    transition: transform .3s cubic-bezier(.32,.72,0,1);
+}
+.sheet.show { transform: translateY(0); }
+.sheet.dragging { transition: none; }
+.grab {
+    width: 36px; height: 4px; border-radius: 2px; background: var(--line2);
+    margin: 12px auto 4px; flex-shrink: 0;
+    padding: 10px 60px; background-clip: content-box; cursor: grab;
+}
+.shead {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 18px 12px; flex-shrink: 0;
+}
+.shead .t { font-size: 17px; font-weight: 600; }
+.shead .x {
+    width: 36px; height: 36px; border-radius: 50%; border: none; cursor: pointer;
+    background: var(--card3); color: var(--fg2);
+    font: 600 16px/1 inherit;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform .12s;
+}
+.shead .x:active { transform: scale(.9); }
+#sh-text { height: 76vh; }
+.bk-hint { font-size: 12px; color: var(--fg2); line-height: 1.6; margin-bottom: 14px; }
+.bk-item {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--card); border-radius: 12px;
+    padding: 11px 14px; margin-bottom: 8px;
+}
+.bk-item .bk-tx { flex: 1; min-width: 0; }
+.bk-item .bk-nm { font-size: 13.5px; font-weight: 600; }
+.bk-item .bk-sz { font-size: 11px; color: var(--fg2); margin-top: 2px; }
+.bk-btn {
+    height: 32px; padding: 0 12px; border-radius: 9px; border: none;
+    background: var(--card3); color: var(--fg);
+    font: 600 12px/1 inherit; cursor: pointer;
+}
+.bk-btn.del { background: color-mix(in srgb, var(--err) 12%, transparent); color: var(--err); }
+.sbody {
+    flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding: 0 18px 20px; font-size: 13px; line-height: 1.7;
+    word-break: break-word;
+}
+#sh-text .sbody { white-space: pre-wrap; font-size: 14.5px; line-height: 1.8; color: var(--fg2); }
+#sh-text .shead .t { font-size: 18px; }
+
+/* 关于 */
+.abt-hero {
+    display: flex; align-items: center; gap: 12px;
+    padding: 2px 2px 12px;
+    border-bottom: 1px solid color-mix(in srgb, var(--line2) 45%, transparent);
+    margin-bottom: 10px;
+}
+.abt-logo {
+    width: 44px; height: 44px; border-radius: 13px;
+    background: var(--pri-c); color: var(--on-pri-c);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+}
+.abt-logo svg { width: 24px; height: 24px; }
+.abt-hero-tx { flex: 1; min-width: 0; }
+.abt-name { font-size: 17px; font-weight: 700; line-height: 1.25; letter-spacing: .1px; }
+.abt-ver { font-size: 11.5px; color: var(--fg2); margin-top: 3px; }
+.abt-desc {
+    font-size: 12.5px; font-weight: 500; color: var(--fg2); line-height: 1.55;
+    margin-bottom: 12px;
+}
+.abt-stats {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px; margin-bottom: 14px;
+}
+.abt-stat {
+    min-width: 0; background: var(--card); border-radius: 13px;
+    padding: 11px 12px; text-align: center;
+}
+.abt-stat.wide {
+    grid-column: 1 / -1; display: flex; align-items: center;
+    justify-content: space-between; gap: 14px; text-align: left;
+    padding: 11px 13px;
+}
+.abt-stat-v {
+    min-width: 0; font-size: 16px; font-weight: 700; line-height: 1.25;
+    font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
+}
+.abt-stat-k { font-size: 11px; color: var(--fg2); margin-top: 3px; }
+.abt-stat.wide .abt-stat-k { margin-top: 0; flex-shrink: 0; }
+.abt-stat.wide .abt-stat-v { text-align: right; }
+.abt-group {
+    font-size: 11px; font-weight: 700; color: var(--fg2);
+    letter-spacing: .45px; margin: 2px 0 8px;
+}
+.abt-foot {
+    text-align: center; font-size: 11px; color: var(--fg2);
+    opacity: .75; margin-top: 12px; padding-bottom: 2px;
+}
+.about-head .n { font-size: 20px; font-weight: 700; }
+.about-head .s { font-size: 12.5px; color: var(--fg2); margin-top: 5px; }
+.abt-txt { color: var(--fg2); font-size: 13px; line-height: 1.75; padding: 6px 2px 2px; }
+.abt-actions {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+.abt-btn {
+    width: 100%; min-width: 0; height: 43px; border: none; border-radius: 12px;
+    background: var(--card2); color: var(--fg); cursor: pointer;
+    font: 600 13px/1 inherit;
+    display: flex; align-items: center; justify-content: flex-start;
+    padding: 0 13px; gap: 9px; margin: 0;
+    transition: background .15s, transform .12s;
+}
+.abt-btn svg { color: var(--pri); flex-shrink: 0; }
+.abt-btn.warn svg { color: var(--err); }
+.abt-btn:active { transform: scale(.98); background: var(--card2); }
+.abt-btn:active { transform: scale(.98); background: color-mix(in srgb, var(--fg) 5%, transparent); }
+.abt-btn.warn { color: var(--err); border-color: color-mix(in srgb, var(--err) 45%, transparent); }
+
+/* 扫描结果 */
+.sc-cat { margin-bottom: 6px; }
+.sc-h {
+    display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px;
+    padding: 10px 2px 5px;
+}
+.sc-h .n {
+    font-size: 11px; font-weight: 500; color: var(--fg2);
+    background: var(--card3); padding: 2px 9px; border-radius: 8px; margin-left: auto;
+}
+
+/* Toast */
+/* 免责声明 */
+.disclaimer-wrap {
+    position: fixed; inset: 0; z-index: 150;
+    background: rgba(0,0,0,.36);
+    -webkit-backdrop-filter: blur(14px) saturate(1.1);
+    backdrop-filter: blur(14px) saturate(1.1);
+    display: none;
+    align-items: center; justify-content: center;
+    padding: 24px;
+    opacity: 0;
+    transition: opacity .3s cubic-bezier(.4,0,.2,1);
+}
+.disclaimer-wrap.open { display: flex; }
+.disclaimer-wrap.vis { opacity: 1; }
+.disclaimer {
+    background: var(--bg); border-radius: 22px;
+    max-width: 400px; width: 100%;
+    max-height: 80vh; overflow-y: auto;
+    padding: 22px 20px 16px;
+    box-shadow: 0 12px 48px rgba(0,0,0,.32);
+    transform: translateY(28px) scale(.92);
+    opacity: 0;
+    transition: transform .38s cubic-bezier(.32,.72,0,1), opacity .3s cubic-bezier(.4,0,.2,1);
+}
+.disclaimer-wrap.vis .disclaimer {
+    transform: translateY(0) scale(1);
+    opacity: 1; display: block;
+}
+.dc-title {
+    font-size: 17px; font-weight: 700; text-align: center;
+    margin-bottom: 14px; color: var(--fg);
+}
+.dc-body {
+    font-size: 13px; line-height: 1.75; color: var(--fg2);
+    padding: 0 2px;
+}
+.dc-body b { color: var(--fg); }
+.dc-actions {
+    display: flex; flex-direction: column; gap: 8px;
+    margin-top: 16px;
+}
+.dc-btn {
+    height: 44px; border-radius: 13px; border: none; cursor: pointer;
+    font: 600 14px/1 inherit;
+    display: flex; align-items: center; justify-content: center;
+    transition: opacity .2s;
+}
+.dc-btn:disabled { opacity: .4; }
+.dc-btn.main { background: var(--pri); color: var(--on-pri); }
+.dc-btn.ghost {
+    background: transparent; color: var(--fg2);
+    border: 1px solid var(--line2);
+}
+
+.toast {
+    position: fixed; left: 50%; bottom: calc(28px + var(--bottom-inset));
+    transform: translateX(-50%) translateY(14px);
+    z-index: 120;
+    background: #32303A; color: #F4EFF4;
+    padding: 12px 20px; border-radius: 14px;
+    font-size: 13.5px; font-weight: 500; line-height: 1.45;
+    opacity: 0; pointer-events: none; transition: opacity .22s, transform .22s;
+    max-width: 82%; text-align: center; white-space: pre-wrap;
+    box-shadow: 0 4px 16px rgba(0,0,0,.22);
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.err { background: #8C1D18; color: #FFEDEA; }
+.dark .toast { background: #E6E0E9; color: #322F35; box-shadow: 0 4px 16px rgba(0,0,0,.4); }
+.dark .toast.err { background: #F2B8B5; color: #530F08; }
+body.sheet-open .toast {
+    bottom: auto; top: calc(var(--top-inset) + 64px);
+    transform: translateX(-50%) translateY(-14px);
+}
+body.sheet-open .toast.show { transform: translateX(-50%) translateY(0); }
+
+.loadbox { text-align: center; padding: 48px 0; color: var(--fg2); font-size: 14px; }
+.loadbox.spin { animation: pulse 1.4s ease infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
+
+/* 扫描弹窗 */
+.scan-modal {
+    position: fixed;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%) scale(0.3);
+    z-index: 95;
+    background: var(--bg);
+    border-radius: 24px;
+    box-shadow: 0 12px 48px rgba(0,0,0,.35);
+    opacity: 0;
+    pointer-events: none;
+    transition: all .4s cubic-bezier(.34, 1.3, .64, 1);
+    width: 280px;
+    padding: 32px 24px;
+    text-align: center;
+}
+.scan-modal.show {
+    opacity: 1; display: block;
+    transform: translate(-50%, -50%) scale(1);
+    pointer-events: auto;
+}
+.scan-modal.expand {
+    width: calc(100vw - 32px);
+    max-width: 520px;
+    max-height: 75vh;
+    padding: 0;
+    text-align: left;
+    transition: all .45s cubic-bezier(.25, .8, .25, 1);
+}
+
+/* 扫描中状态 */
+.scan-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}
+.scan-progress {
+    width: 200px; height: 5px; border-radius: 3px;
+    background: var(--card4); overflow: hidden;
+}
+.scan-progress-bar {
+    width: 0; height: 100%; border-radius: 3px;
+    background: var(--pri);
+    transition: width .2s ease;
+}
+@keyframes scanprog {
+    0% { transform: translateX(-100%); }
+    50% { transform: translateX(150%); }
+    100% { transform: translateX(250%); }
+}
+.scan-spinner {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: 4px solid var(--card3);
+    border-top-color: var(--pri);
+    animation: spin-scan 1s linear infinite;
+}
+@keyframes spin-scan {
+    to { transform: rotate(360deg); }
+}
+.scan-loading .txt {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--fg2);
+}
+
+/* 扫描结果容器 */
+.scan-results {
+    display: none;
+    flex-direction: column;
+    height: 100%;
+    max-height: 75vh;
+}
+.scan-results.show {
+    display: flex;
+}
+.scan-header {
+    padding: 20px 20px 16px;
+    border-bottom: 1px solid var(--line2);
+    flex-shrink: 0;
+}
+.scan-header .title {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 8px;
+}
+.scan-header .subtitle {
+    font-size: 13px;
+    color: var(--fg2);
+}
+.scan-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 16px 20px;
+}
+.scan-empty {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--fg2);
+    font-size: 14px;
+}
+
+/* 扫描卡片 */
+.unmanaged-card {
+    background: var(--card);
+    border-radius: 14px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    transition: background .15s, transform .12s;
+    min-height: 64px;
+}
+.unmanaged-card:active {
+    transform: scale(.98);
+    background: var(--card2);
+}
+.unmanaged-card .icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    flex-shrink: 0;
+    overflow: hidden;
+    background: var(--card3);
+}
+.unmanaged-card .icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.unmanaged-card .info {
+    flex: 1;
+    min-width: 0;
+}
+.unmanaged-card .name {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+/* 内核配色 */
+.kernel-badge         { color: #7C5CD6; }
+.kernel-badge.mstate  { color: var(--pri); }
+.kernel-badge.cfg     { color: var(--tert); }
+.kernel-badge.partial { color: var(--fg2); }
+.kernel-badge.game    { color: #0FA3B1; }
+.kernel-badge.newd    { color: var(--ok); }
+.dark .kernel-badge         { color: #A78BE8; }
+.dark .kernel-badge.game    { color: #4FC3D9; }
+.unmanaged-card .pkg {
+    font-size: 11.5px;
+    color: var(--fg2);
+    font-family: ui-monospace, Menlo, Consolas, Droid Sans Mono, monospace;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.unmanaged-card .arrow {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    opacity: .4;
+}
+
+/* 分析结果：勾选、目录标签与底部操作栏 */
+.unmanaged-card.pick { align-items: flex-start; }
+.unmanaged-card.pick .pick-cb { flex-shrink: 0; display: flex; align-items: center; padding: 6px 2px; }
+.pick-cb input { display: none; }
+.pick-cb .pick-box { width: 20px; height: 20px; border-radius: 6px; border: 2px solid var(--line2); display: block; position: relative; transition: background .15s, border-color .15s; }
+.pick-cb input:checked + .pick-box { background: var(--pri); border-color: var(--pri); }
+.pick-cb input:checked + .pick-box::after { content: ''; position: absolute; left: 5px; top: 2px; width: 5px; height: 10px; border: solid var(--on-pri); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.unmanaged-card.pick.off .info { opacity: .45; }
+.dchip-wrap { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.dchip { font-size: 10.5px; padding: 3px 8px; border-radius: 7px; background: var(--card3); color: var(--fg2); font-family: ui-monospace, Menlo, Consolas, Droid Sans Mono, monospace; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dchip.susp { background: color-mix(in srgb, var(--tert) 14%, transparent); color: var(--tert); }
+.dchip.susp.on { background: var(--tert); color: var(--bg); }
+.dchip.new { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
+.pick-ig { flex-shrink: 0; align-self: center; height: 30px; padding: 0 10px; border: none; border-radius: 9px; background: var(--card3); color: var(--fg2); font: 600 11.5px/1 inherit; cursor: pointer; transition: transform .12s; }
+.pick-ig:active { transform: scale(.94); }
+.scan-foot { display: flex; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--line2); flex-shrink: 0; }
+.sf-btn { flex: 1; height: 42px; border: 0; border-radius: 12px; font: 700 13.5px/1 inherit; cursor: pointer; transition: transform .12s; }
+.sf-btn:active { transform: scale(.97); }
+.sf-btn.main { background: var(--pri); color: var(--on-pri); }
+.sf-btn.ok { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); }
+.sf-btn:disabled { opacity: .45; }
+.bk-btn.ig { background: color-mix(in srgb, var(--pri) 14%, transparent); color: var(--pri); }
+
+/* 详情页 */
+.detail-page {
+    position: fixed;
+    inset: 0;
+    z-index: 102;
+    background: var(--bg);
+    transform: translateX(100%);
+    visibility: hidden;
+    pointer-events: none;
+    transition: transform .35s cubic-bezier(.25, .8, .25, 1), visibility 0s .35s;
+    display: flex;
+    flex-direction: column;
+}
+.detail-page.show {
+    transform: translateX(0);
+    visibility: visible;
+    pointer-events: auto;
+    transition: transform .35s cubic-bezier(.25, .8, .25, 1);
+}
+.detail-header {
+    padding: 16px 16px 12px;
+    padding-top: calc(16px + var(--top-inset));
+    border-bottom: 1px solid var(--line2);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+.detail-back {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: var(--card2);
+    color: var(--fg);
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: transform .12s, background .15s;
+}
+.detail-back:active {
+    transform: scale(.92);
+    background: var(--card3);
+}
+.detail-title-wrap {
+    flex: 1;
+    min-width: 0;
+}
+.detail-title {
+    font-size: 17px;
+    font-weight: 700;
+    margin-bottom: 2px;
+}
+.detail-subtitle {
+    font-size: 12px;
+    color: var(--fg2);
+    font-family: ui-monospace, Menlo, Consolas, Droid Sans Mono, monospace;
+}
+.detail-icon {
+    width: 48px; height: 48px;
+    border-radius: 12px;
+    background: var(--card3);
+    overflow: hidden;
+    flex-shrink: 0;
+}
+.detail-icon img { width: 100%; height: 100%; object-fit: cover; }
+.detail-section-title {
+    display: flex; align-items: center; gap: 6px;
+}
+.detail-section-title svg { color: var(--tert); flex-shrink: 0; }
+
+/* 数据摘要条 */
+.detail-stats {
+    display: flex; gap: 10px;
+    margin-bottom: 20px;
+}
+.dstat {
+    flex: 1;
+    background: var(--card);
+    border-radius: 14px;
+    padding: 12px 8px;
+    text-align: center;
+}
+.dstat-v {
+    font-size: 15px; font-weight: 700;
+    margin-bottom: 2px;
+    font-variant-numeric: tabular-nums;
+}
+.dstat-k {
+    font-size: 11px; color: var(--fg2);
+}
+
+/* 内核状态卡片 */
+.detail-kcard {
+    background: var(--card);
+    border-radius: 14px;
+    padding: 16px;
+    display: flex; align-items: center; gap: 12px;
+}
+.detail-kbadge {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--tert);
+    flex-shrink: 0;
+}
+.detail-kbadge.mstate { background: var(--pri); }
+.detail-kbadge.cfg    { background: var(--tert); }
+.detail-kbadge.full   { background: #7C5CD6; }
+.detail-kbadge.partial{ background: var(--fg2); }
+.detail-kbadge.game   { background: #0FA3B1; }
+.detail-ktext {
+    font-size: 13.5px; line-height: 1.55;
+}
+.detail-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 16px;
+    padding-bottom: calc(20px + var(--bottom-inset) + 80px);
+}
+.detail-section {
+    margin-bottom: 24px;
+}
+.detail-section-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--fg2);
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+}
+.detail-file-list {
+    background: var(--card);
+    border-radius: 14px;
+    overflow: hidden;
+}
+.detail-file-item {
+    padding: 14px 16px;
+    position: relative;
+}
+.detail-file-item + .detail-file-item::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 16px;
+    right: 16px;
+    height: 1px;
+    background: var(--line2);
+    opacity: .5;
+}
+.detail-file-name {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    font-family: ui-monospace, Menlo, Consolas, Droid Sans Mono, monospace;
+    word-break: break-all;
+}
+.detail-file-path {
+    font-size: 12px;
+    color: var(--fg2);
+    font-family: ui-monospace, Menlo, Consolas, Droid Sans Mono, monospace;
+    word-break: break-all;
+}
+
+.detail-actions {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 16px;
+    padding-bottom: calc(16px + var(--bottom-inset));
+    background: var(--bg);
+    border-top: 1px solid var(--line2);
+    display: flex;
+    gap: 12px;
+    z-index: 97;
+}
+.detail-btn {
+    flex: 1;
+    height: 52px;
+    border: none;
+    border-radius: 14px;
+    font: 600 15px/1 inherit;
+    cursor: pointer;
+    transition: transform .12s, opacity .2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.detail-btn:active {
+    transform: scale(.97);
+}
+.detail-btn:disabled {
+    opacity: .4;
+    pointer-events: none;
+}
+.detail-btn.remove {
+    background: var(--card2);
+    color: var(--fg2);
+}
+.detail-btn.remove.enabled {
+    background: var(--err-c);
+    color: var(--on-err-c);
+}
+.detail-btn.add {
+    background: var(--pri);
+    color: var(--on-pri);
+}
+
+/* 适配标签 */
+/* 标签样式 */
+.compat-tag, .kernel-badge {
+    display: inline-block;
+    width: 8px; height: 8px; border-radius: 50%;
+    background: currentColor;
+    padding: 0; margin: 0 0 0 3px;
+    vertical-align: middle;
+    font-size: 0; line-height: 0; overflow: hidden;
+}
+.compat-tag.full, .kernel-badge.full {
+    display: inline-flex; align-items: center; gap: 5px;
+    width: auto; height: auto;
+    font-size: 10px; font-weight: 700;
+    padding: 3px 8px; border-radius: 6px; line-height: 1.4;
+    margin: 4px 0 0;
+    background: color-mix(in srgb, currentColor 13%, transparent);
+    vertical-align: baseline;
+}
+.compat-tag.full::before, .kernel-badge.full::before {
+    content: ''; width: 6px; height: 6px; border-radius: 50%;
+    background: currentColor; flex-shrink: 0;
+}
+.compat-tag.green  { color: var(--ok); }
+.compat-tag.yellow { color: #B8860B; }
+.compat-tag.red    { color: var(--err); }
+.dark .compat-tag.yellow { color: #E6C36A; }
+
+/* 说明按钮 */
+.legend-btn {
+    position: absolute; right: 18px; top: 20px;
+    display: inline-flex; align-items: center; gap: 4px;
+    height: 30px; padding: 0 12px;
+    border: none; border-radius: 9px; cursor: pointer;
+    background: var(--card3); color: var(--fg2);
+    font: 600 12px/1 inherit;
+    transition: transform .12s, background .15s;
+}
+.legend-btn:active { transform: scale(.92); background: var(--card4); }
+.scan-header { position: relative; }
+
+/* 图例 */
+.legend-sheet {
+    position: fixed; inset: 0; z-index: 110;
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+    background: rgba(0,0,0,.42);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    opacity: 0; pointer-events: none;
+    transition: opacity .25s;
+}
+.legend-sheet.show { opacity: 1; pointer-events: auto; }
+.legend-card {
+    width: 100%; max-width: 420px;
+    background: var(--bg); border-radius: 20px;
+    padding: 20px; position: relative;
+    transform: scale(.9); opacity: 0;
+    transition: transform .3s cubic-bezier(.34,1.2,.64,1), opacity .25s;
+    box-shadow: 0 12px 48px rgba(0,0,0,.35);
+}
+.legend-sheet.show .legend-card { transform: scale(1); opacity: 1; }
+.legend-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding-bottom: 10px; margin-bottom: 12px;
+    border-bottom: 1px solid color-mix(in srgb, var(--line2) 60%, transparent);
+}
+.legend-head .legend-close {
+    position: static; width: 30px; height: 30px;
+}
+.legend-title { font-size: 17px; font-weight: 700; margin: 0; }
+.legend-close {
+    position: absolute; right: 14px; top: 14px;
+    width: 30px; height: 30px; border-radius: 50%;
+    background: var(--card3); color: var(--fg2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; cursor: pointer;
+    transition: transform .12s;
+}
+.legend-close:active { transform: scale(.9); }
+.legend-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
+.legend-row .compat-tag, .legend-row .kernel-badge { flex-shrink: 0; margin-top: 2px; }
+.legend-txt { font-size: 12.5px; color: var(--fg2); line-height: 1.6; font-weight: 500; }
+.legend-sep { height: 1px; background: color-mix(in srgb, var(--line2) 50%, transparent); margin: 14px 0; }
+.legend-group {
+    font-size: 11px; font-weight: 700; color: var(--fg2);
+    letter-spacing: .5px; margin: 14px 0 8px;
+}
+.legend-group:first-child { margin-top: 0; }
+.legend-actions { display: flex; gap: 10px; margin-top: 16px; }
+.legend-actions .dc-btn { flex: 1; height: 42px; }
+.legend-card { max-height: 86vh; overflow-y: auto; display: flex; flex-direction: column; }
+.legend-body { overflow-y: auto; }
+
+/* 分区标题 */
+.sec-h {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13.5px; font-weight: 700;
+    padding: 14px 4px 10px;
+}
+.sec-h.ok-t { color: var(--ok); }
+.sec-h.mid-t { color: var(--tert); }
+
+/* 实验性二级弹窗层级独立于页面切换容器。 */
+.scan-modal { z-index: 101; overflow: hidden; }
+.scan-modal.expand { height: 75vh; max-height: 720px; display: flex; flex-direction: column; }
+.scan-modal.expand .scan-results.show { flex: 1 1 auto; min-height: 0; height: auto; overflow: hidden; }
+.scan-modal.expand .scan-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.legend-sheet { z-index: 111; }
+/* 首页免责声明降低视觉权重；标题、正文与强调文字统一使用弱化色。 */
+.home-disclaimer { opacity: .62; }
+.home-disclaimer-title,
+.home-disclaimer-body,
+.home-disclaimer-body b { color: var(--fg2); }
+/* 加号菜单与“应用”页状态直接绑定，不依赖 JS 写入可见性。 */
+#pg1.on ~ .fab-area {
+    opacity: 1; display: block;
+    transform: scale(1) translateY(0);
+    pointer-events: auto;
+}
+/* FAB 容器本身不接收事件：关闭的菜单面板不能覆盖应用列表。 */
+.fab-area,
+.fab-area.app-visible,
+#pg1.on ~ .fab-area { pointer-events: none; }
+.fab-area.app-visible .fab-add,
+#pg1.on ~ .fab-area .fab-add { pointer-events: auto; }
+.fab-area:not(.app-visible) .fab-add { pointer-events: none; }
+.fab-area.open .fab-panel { pointer-events: auto; }
+/* 触摸命中区域明确分层，避免透明固定层偶发挡住列表和开关。 */
+.page { z-index: 0; }
+.page.on { z-index: 1; }
+#pg1.on { isolation: isolate; }
+#pg1.on .searchbox,
+#pg1.on .applist,
+#pg1.on .arow,
+#pg1.on .sw,
+#pg1.on .sw input { position: relative; z-index: 2; }
+#pg1.on .applist { pointer-events: auto; touch-action: pan-y; }
+.scan-modal:not(.show),
+.legend-sheet:not(.show),
+.disclaimer-wrap:not(.open),
+.sheet:not(.show),
+.scrim:not(.show) { visibility: hidden; pointer-events: none; }
+/* 关闭后的免责声明不能留在触摸层上，否则会挡住应用列表。 */
+.disclaimer-wrap { pointer-events: none; }
+.disclaimer-wrap.open { pointer-events: auto; }
+/* 取消分析确认 */
+.scan-cancel-dialog { position: fixed; inset: 0; z-index: 160; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(0,0,0,.42); opacity: 0; pointer-events: none; transition: opacity .18s; }
+.scan-cancel-dialog.show { opacity: 1; pointer-events: auto; }
+.scan-cancel-card { width: 100%; max-width: 320px; background: var(--bg); border-radius: 20px; padding: 22px 20px 16px; box-shadow: 0 12px 42px rgba(0,0,0,.32); transform: scale(.94); transition: transform .2s; }
+.scan-cancel-dialog.show .scan-cancel-card { transform: scale(1); }
+.scan-cancel-title { font-size: 18px; line-height: 1.3; color: var(--fg); }
+.scan-cancel-text { margin-top: 10px; font-size: 13px; line-height: 1.6; color: var(--fg2); }
+.scan-cancel-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.scan-cancel-actions button { height: 38px; min-width: 72px; border: 0; border-radius: 10px; padding: 0 14px; background: var(--card3); color: var(--fg); font: 700 13px/1 inherit; }
+.scan-cancel-actions .danger { background: var(--pri); color: var(--on-pri); }
+/* 搜索收纳到应用页的浮动菜单。 */
+.fab-search { display: none; align-items: center; gap: 8px; height: 44px; padding: 0 10px; background: var(--card2); border-radius: 12px; color: var(--pri); }
+.fab-area.searching .fab-search-btn { display: none; }
+.fab-search input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--fg); font: 700 13px/1 inherit; }
+.fab-search input::placeholder { color: var(--fg2); }
+.fab-search button { width: 24px; height: 24px; border: 0; border-radius: 50%; background: transparent; color: var(--fg2); font: 700 20px/1 sans-serif; line-height: 1; }
+.fab-search button:active { background: var(--card3); color: var(--fg); }
+.fab-search-btn svg { color: var(--pri); opacity: 1; }
+/* 搜索从加号菜单启动，输入框在列表上方展开，不遮挡匹配项。 */
+/* 搜索只在临时弹窗中输入，筛选后不占用应用列表高度。 */
+.fab-area.search-hidden { opacity: 0; pointer-events: none; transform: scale(.8) translateY(14px); }
+.app-search-dialog { position: fixed; inset: 0; z-index: 155; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(0,0,0,.42); opacity: 0; pointer-events: none; transition: opacity .18s; }
+.app-search-dialog.show { opacity: 1; pointer-events: auto; }
+.app-search-card { width: 100%; max-width: 340px; background: var(--bg); border-radius: 20px; padding: 20px; box-shadow: 0 12px 42px rgba(0,0,0,.32); transform: scale(.94); transition: transform .2s; }
+.app-search-dialog.show .app-search-card { transform: scale(1); }
+.app-search-title { font-size: 18px; line-height: 1.3; color: var(--fg); }
+.app-search-input { display: flex; align-items: center; gap: 10px; height: 46px; margin-top: 16px; padding: 0 13px; border-radius: 13px; background: var(--card2); color: var(--pri); }
+.app-search-input input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--fg); font: 700 14px/1 inherit; }
+.app-search-input input::placeholder { color: var(--fg2); }
+.app-search-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.app-search-actions button { height: 38px; min-width: 72px; border: 0; border-radius: 10px; padding: 0 14px; background: var(--card3); color: var(--fg); font: 700 13px/1 inherit; }
+.app-search-actions .main { background: var(--pri); color: var(--on-pri); }
+/* 实验性功能解锁提示 */
+.experimental-unlock-dialog { position: fixed; inset: 0; z-index: 201; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(0,0,0,.42); opacity: 0; pointer-events: none; transition: opacity .2s; }
+.experimental-unlock-dialog.show { opacity: 1; pointer-events: auto; }
+.experimental-unlock-card { width: 100%; max-width: 320px; padding: 26px 22px 20px; border-radius: 22px; background: var(--bg); color: var(--fg); text-align: center; box-shadow: 0 14px 44px rgba(0,0,0,.34); transform: scale(.92) translateY(12px); transition: transform .24s cubic-bezier(.34,1.25,.64,1); }
+.experimental-unlock-dialog.show .experimental-unlock-card { transform: scale(1) translateY(0); }
+.experimental-unlock-mark { width: 48px; height: 48px; margin: 0 auto 14px; border-radius: 16px; display: flex; align-items: center; justify-content: center; background: var(--pri-c); color: var(--on-pri-c); font-size: 27px; }
+.experimental-unlock-title { font-size: 19px; line-height: 1.35; }
+.experimental-unlock-text { margin-top: 9px; color: var(--fg2); font-size: 13px; line-height: 1.55; }
+.experimental-unlock-card button { width: 100%; height: 42px; margin-top: 20px; border: 0; border-radius: 12px; background: var(--pri); color: var(--on-pri); font: 700 14px/1 inherit; }
+.firework-core { width: 26px; height: 26px; animation: coreflash .72s ease-out forwards; }
+@keyframes coreflash { 0% { transform: translate(-50%,-50%) scale(.15); opacity: 1; } 40% { transform: translate(-50%,-50%) scale(2.8); opacity: 1; } 100% { transform: translate(-50%,-50%) scale(4.5); opacity: 0; } }
+</style>
+</head>
+<body>
+
+<header>
+    <div class="topbar">
+        <div class="name">内核管控</div>
+        <div class="chip" id="chip-ver"></div>
+        <div class="grow"></div>
+        <div class="top-menu" id="top-menu">
+            <div class="top-menu-panel">
+                <button class="top-menu-btn" id="b-theme">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg>
+                    <span class="top-menu-label" id="b-theme-t">自动</span>
+                </button>
+                <button class="top-menu-btn" id="b-ignored">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z"></path><circle cx="12" cy="12" r="2.5"></circle><path d="M4 20 20 4"></path></svg>
+                    <span class="top-menu-label">已忽略应用</span>
+                </button>
+                <button class="top-menu-btn" id="b-info">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 10v6M12 7h.01"></path></svg>
+                    <span class="top-menu-label">关于</span>
+                </button>
+            </div>
+            <button class="top-menu-trigger" id="b-top-menu" aria-label="更多选项"><span class="ticon-dots"><i></i><i></i><i></i></span></button>
+        </div>
+    </div>
+    <div class="seg">
+        <button class="on" data-i="0">概览</button>
+        <button data-i="1">应用</button>
+    </div>
+</header>
+
+<div class="pager">
+    <!-- 概览 -->
+    <div class="page on" id="pg0">
+        <div class="hero unlock-target" id="hero-unlock">
+            <div class="big" id="h-big">加载中…</div>
+            <div class="sub" id="h-sub">正在读取模块状态</div>
+        </div>
+
+        <div class="grid">
+            <div class="gitem hl">
+                <div class="cap">Root 管理器</div>
+                <div class="val" id="g-root">–</div>
+            </div>
+            <div class="gitem">
+                <div class="cap">系统内核</div>
+                <div class="val" id="g-wv">–</div>
+            </div>
+            <div class="gitem">
+                <div class="cap">设备</div>
+                <div class="val" id="g-dev">–</div>
+            </div>
+            <div class="gitem">
+                <div class="cap">系统版本</div>
+                <div class="val" id="g-os">–</div>
+            </div>
+        </div>
+
+        <div class="store tappable" id="card-bk" role="button">
+            <div class="row">
+                <span class="cap">备份占用</span>
+                <span class="pct" id="g-bk-p">–</span>
+            </div>
+            <div class="val" id="g-bk">–</div>
+            <div class="bar bk"><i id="bar-bk" style="width:0%"></i></div>
+        </div>
+        <div class="store">
+            <div class="row">
+                <span class="cap">数据分区使用</span>
+                <span class="pct" id="g-dt-p">–</span>
+            </div>
+            <div class="val" id="g-dt">–</div>
+            <div class="bar"><i id="bar-dt" style="width:0%"></i></div>
+        </div>
+        <section class="home-disclaimer" aria-labelledby="home-disclaimer-title">
+            <div class="home-disclaimer-title" id="home-disclaimer-title">免责声明与使用须知</div>
+            <div class="home-disclaimer-body">
+            本模块通过调整应用私有数据目录，使已选应用优先使用系统 WebView。该操作可能影响应用原有网页内核、缓存及相关功能。<br><br>
+            <b>免责声明：</b>本模块按“现状”提供，不对因使用、配置错误、应用更新、系统差异或第三方服务变化引起的功能异常、数据损失或其他后果承担责任。请在充分了解风险后自行决定是否使用，并自行做好重要数据备份。<br><br>
+            <b>使用须知：</b><br>
+            · 建议先对单个应用进行测试，再逐步扩大管控范围<br>
+            · 若应用出现白屏、加载异常或功能缺失，请关闭其开关并保存应用配置以恢复原有内核<br>
+            · 应用更新后可能重新下载内核，必要时请重新应用配置<br>
+            · 模块生效期间请勿清除已管控应用的数据；如需排查，请先关闭对应管控项<br><br>
+            使用本模块即表示你已阅读、理解并接受上述说明。
+            </div>
+        </section>
+
+    </div>
+
+    <!-- 应用 -->
+    <div class="page" id="pg1">
+        <div class="experimental-tools" id="experimental-tools">
+            <div class="experimental-title">实验性功能</div>
+            <div class="experimental-desc">分析本机应用的私有网页内核特征，结果仅供手动确认。</div>
+            <div class="experimental-actions">
+                <button class="experimental-btn primary" id="b-scan">分析应用</button>
+                <button class="experimental-btn last" id="b-last-scan">查看上次</button>
+            </div>
+        </div>
+        <div class="applist" id="list">
+            <div class="loadbox spin">加载中…</div>
+        </div>
+</div>
+    </div>
+
+<div class="scrim" id="scrim"></div>
+
+<!-- 关于 -->
+<div class="sheet" id="sh-about">
+    <div class="grab"></div>
+    <div class="shead">
+        <div class="t">关于</div>
+        <button class="x" data-x>✕</button>
+    </div>
+    <div class="sbody">
+        <div class="abt-hero">
+            <div class="abt-logo">
+                <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 010 18M12 3a15 15 0 000 18"/></svg>
+            </div>
+            <div class="abt-hero-tx">
+                <div class="abt-name">网页内核管控</div>
+                <div class="abt-ver" id="abt-ver">–</div>
+            </div>
+        </div>
+        <div class="abt-desc">强制应用使用系统网页内核，规避自带老旧内核的安全与兼容性问题。启用后自动备份并移除自带内核，关闭时恢复。</div>
+        <div class="abt-stats">
+            <div class="abt-stat">
+                <div class="abt-stat-v" id="abt-apps">–</div>
+                <div class="abt-stat-k">管控应用</div>
+            </div>
+            <div class="abt-stat">
+                <div class="abt-stat-v" id="abt-saved">–</div>
+                <div class="abt-stat-k">节省空间</div>
+            </div>
+            <div class="abt-stat wide">
+                <div class="abt-stat-k">系统内核</div>
+                <div class="abt-stat-v" id="abt-wv">–</div>
+            </div>
+        </div>
+        <div class="abt-group">操作</div>
+        <div class="abt-actions">
+        <button class="abt-btn" id="b-log">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+            运行日志
+        </button>
+        <button class="abt-btn" id="b-cl">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+            更新日志
+        </button>
+        <button class="abt-btn" id="b-gh">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.55v-2.15c-3.2.7-3.87-1.36-3.87-1.36-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.19 1.76 1.19 1.03 1.76 2.7 1.25 3.35.95.1-.74.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 015.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.42-2.7 5.39-5.26 5.68.41.35.77 1.04.77 2.1v3.12c0 .3.21.66.8.55A11.51 11.51 0 0023.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>
+            GitHub 仓库
+        </button>
+        <button class="abt-btn warn" id="b-reboot">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 11-12.73 0"/><path d="M12 2v10"/></svg>
+            重启设备
+        </button>
+        </div>
+        <div class="abt-foot">Made with ♥ · 管控异常时先关开关再反馈</div>
+    </div>
+</div>
+
+<!-- 备份管理 -->
+<div class="sheet" id="sh-bk">
+    <div class="grab"></div>
+    <div class="shead">
+        <div class="t">备份管理</div>
+        <button class="x" data-x>✕</button>
+    </div>
+    <div class="sbody">
+        <div class="bk-hint">这里保存了已管控应用的原网页内核。关闭对应应用的管控开关并保存后，模块会自动还原；“删除”会永久清除该应用备份，之后将无法自动还原。</div>
+        <div id="bk-list"></div>
+    </div>
+</div>
+
+<!-- 已忽略应用 -->
+<div class="sheet" id="sh-ignored">
+    <div class="grab"></div>
+    <div class="shead">
+        <div class="t">已忽略应用</div>
+        <button class="x" data-x>✕</button>
+    </div>
+    <div class="sbody">
+        <div class="bk-hint">这些应用不会再出现在分析结果中。恢复后，下次分析会重新提示。</div>
+        <div id="ig-list"></div>
+    </div>
+</div>
+
+<!-- 文本弹层 -->
+<div class="sheet" id="sh-text">
+    <div class="grab"></div>
+    <div class="shead">
+        <div class="t" id="sh-text-t">详情</div>
+        <button class="x" data-x>✕</button>
+    </div>
+    <div class="sbody" id="sh-text-b"></div>
+</div>
+
+<!-- 免责声明（强制弹窗） -->
+<div class="disclaimer-wrap" id="disc-wrap">
+    <div class="disclaimer">
+        <div class="dc-title">免责声明与使用须知</div>
+        <div class="dc-body">
+            本模块通过调整应用私有数据目录，使已选应用优先使用系统 WebView。该操作可能影响应用原有网页内核、缓存及相关功能。<br><br>
+            <b>免责声明：</b>本模块按“现状”提供，不对因使用、配置错误、应用更新、系统差异或第三方服务变化引起的功能异常、数据损失或其他后果承担责任。请在充分了解风险后自行决定是否使用，并自行做好重要数据备份。<br><br>
+            <b>使用须知：</b><br>
+            · 建议先对单个应用进行测试，再逐步扩大管控范围<br>
+            · 若应用出现白屏、加载异常或功能缺失，请关闭其开关并保存应用配置以恢复原有内核<br>
+            · 应用更新后可能重新下载内核，必要时请重新应用配置<br>
+            · 模块生效期间请勿清除已管控应用的数据；如需排查，请先关闭对应管控项<br><br>
+            使用本模块即表示你已阅读、理解并接受上述说明。
+        </div>
+        <div class="dc-actions">
+            <button class="dc-btn ghost" id="disc-once" disabled>本次关闭 (5)</button>
+            <button class="dc-btn main" id="disc-forever" disabled>已阅，不再提示 (5)</button>
+        </div>
+    </div>
+</div>
+        <div class="fab-area">
+            <div class="fab-panel" id="fab-panel">
+                <button class="fbtn fab-search-btn" id="b-search">
+                    <span class="ft">搜索应用</span>
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
+                </button>
+                <button class="fbtn" id="b-sel-safe">
+                    <span class="ft">全选</span>
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                </button>
+                <button class="fbtn danger" id="b-stop">
+                    <span class="ft">停止已选</span>
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                </button>
+                <button class="fbtn ok" id="b-save">
+                    <span class="ft" id="b-apply-t">保存</span>
+                    <svg class="fbtn-ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+                    <span class="fab-spin"></span>
+                </button>
+            </div>
+            <button class="fab-add" id="b-fab">
+                <svg class="fab-plus" viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+        </div>
+<div class="app-search-dialog" id="app-search-dialog" role="dialog" aria-modal="true">
+    <form class="app-search-card" id="app-search-form">
+        <div class="app-search-title">搜索应用</div>
+        <div class="app-search-input"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg><input id="q" type="search" placeholder="应用名或包名" autocomplete="off"></div>
+        <div class="app-search-actions"><button type="button" id="b-search-clear">清除</button><button type="submit" class="main">完成</button></div>
+    </form>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="fireworks" id="fireworks"></div>
+<div class="experimental-unlock-dialog" id="experimental-unlock-dialog" role="dialog" aria-modal="true">
+    <div class="experimental-unlock-card">
+        <div class="experimental-unlock-mark">✦</div>
+        <div class="experimental-unlock-title">恭喜开启实验性功能</div>
+        <div class="experimental-unlock-text">已在「应用」页顶部解锁应用分析。</div>
+        <button id="b-experimental-unlock-ok">知道了</button>
+    </div>
+</div>
+
+<!-- 扫描弹窗 -->
+<div class="scan-modal" id="scan-modal">
+    <div class="scan-loading" id="scan-loading">
+        <div class="scan-spinner"></div>
+        <div class="txt" id="scan-progress-text">正在分析…</div>
+        <div class="scan-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scan-progress-bar" id="scan-progress-bar"></div></div>
+    </div>
+    <div class="scan-results" id="scan-results">
+        <div class="scan-header">
+            <div class="title">应用分析结果</div>
+            <div class="subtitle" id="scan-count">找到 0 个应用</div>
+            <button class="legend-btn" id="legend-btn">说明 ⓘ</button>
+        </div>
+        <div class="scan-body" id="scan-body">
+            <div class="scan-empty">未发现内核特征</div>
+        </div>
+        <div class="scan-foot" id="scan-foot" style="display:none">
+            <button class="sf-btn main" id="b-scan-add" disabled>加入所选应用</button>
+            <button class="sf-btn ok" id="b-scan-merge" disabled>合并所选目录</button>
+        </div>
+    </div>
+</div>
+
+<div class="scan-cancel-dialog" id="scan-cancel-dialog" role="dialog" aria-modal="true">
+    <div class="scan-cancel-card">
+        <div class="scan-cancel-title">取消分析？</div>
+        <div class="scan-cancel-text">当前结果不会保存。后台检查会自行结束。</div>
+        <div class="scan-cancel-actions"><button id="scan-cancel-keep">继续分析</button><button class="danger" id="scan-cancel-confirm">确定取消</button></div>
+    </div>
+</div>
+
+<!-- 三级详情页 -->
+<div class="detail-page" id="detail-page">
+    <div class="detail-header">
+        <button class="detail-back" id="detail-back">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div class="detail-icon" id="detail-icon"><img src="" alt="" onerror="this.style.display='none'"></div>
+        <div class="detail-title-wrap">
+            <div class="detail-title" id="detail-name">应用名称</div>
+            <div class="detail-subtitle" id="detail-pkg">com.example.app</div>
+            <div class="compat-tag full yellow" id="detail-compat">适配状态</div>
+        </div>
+    </div>
+    <div class="detail-content">
+        <div class="detail-stats" id="detail-stats">
+            <div class="dstat">
+                <div class="dstat-v" id="ds-kernel">–</div>
+                <div class="dstat-k">内核</div>
+            </div>
+            <div class="dstat">
+                <div class="dstat-v" id="ds-dirs">–</div>
+                <div class="dstat-k">特征目录</div>
+            </div>
+            <div class="dstat">
+                <div class="dstat-v" id="ds-bk">–</div>
+                <div class="dstat-k">备份占用</div>
+            </div>
+        </div>
+        <div class="detail-section">
+            <div class="detail-section-title">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M4.9 4.9l2.1 2.1m10 10l2.1 2.1M4.9 19.1l2.1-2.1m10-10l2.1-2.1"/></svg>
+                内核状态
+            </div>
+            <div class="detail-kcard" id="detail-kcard">
+                <div class="detail-kbadge" id="detail-kbadge"></div>
+                <div class="detail-ktext" id="detail-kernel">完整内核</div>
+            </div>
+        </div>
+        <div class="detail-section">
+            <div class="detail-section-title">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+                特征文件
+            </div>
+            <div class="detail-file-list" id="detail-files">
+                <!-- 动态填充 -->
+            </div>
+        </div>
+    </div>
+    <div class="detail-actions">
+        <button class="detail-btn remove" id="detail-remove" disabled>移除</button>
+        <button class="detail-btn add" id="detail-add">添加</button>
+    </div>
+</div>
+
+<!-- 图例说明弹层 -->
+<div class="legend-sheet" id="legend-sheet">
+    <div class="legend-card">
+        <div class="legend-head">
+            <div class="legend-title">图例说明</div>
+            <div class="legend-close" id="legend-close">✕</div>
+        </div>
+        <div class="legend-body">
+            <div class="legend-group">适配状态</div>
+            <div class="legend-row">
+                <span class="compat-tag full green">已适配</span>
+                <div class="legend-txt">长期验证过，大部分功能正常，可以管控</div>
+            </div>
+            <div class="legend-row">
+                <span class="compat-tag full yellow">未验证</span>
+                <div class="legend-txt">尚未验证过，可能出现页面异常，建议自行测试</div>
+            </div>
+            <div class="legend-row">
+                <span class="compat-tag full red">已知风险</span>
+                <div class="legend-txt">已知有功能异常（如地图、在线文档），不建议管控</div>
+            </div>
+            <div class="legend-group">管控状态</div>
+            <div class="legend-row">
+                <span class="kernel-badge full mstate">管控中</span>
+                <div class="legend-txt">开关已生效，原内核移入备份区，关闭开关即可恢复</div>
+            </div>
+            <div class="legend-row">
+                <span class="kernel-badge full cfg">已配置</span>
+                <div class="legend-txt">开关已添加但内核还在原位，点「应用配置」后开始管控</div>
+            </div>
+            <div class="legend-group">分析结果</div>
+            <div class="legend-row">
+                <span class="kernel-badge full partial">? 可疑目录</span>
+                <div class="legend-txt">按名称或体积推测的内核目录，未经验证，默认不勾选，点一下可加入</div>
+            </div>
+            <div class="legend-row">
+                <span class="kernel-badge full newd">新增目录</span>
+                <div class="legend-txt">已配置应用中新出现的内核目录，合并后随「应用配置」生效</div>
+            </div>
+            <div class="legend-group">内核类型</div>
+            <div class="legend-row">
+                <span class="kernel-badge full">完整内核</span>
+                <div class="legend-txt">自带完整浏览器内核（通常 50MB 以上），移除可省大量空间</div>
+            </div>
+            <div class="legend-row">
+                <span class="kernel-badge full partial">组件残留</span>
+                <div class="legend-txt">仅剩少量组件文件，移除收益较小</div>
+            </div>
+            <div class="legend-row">
+                <span class="kernel-badge full game">游戏</span>
+                <div class="legend-txt">疑似游戏应用，多为防作弊或活动页，管控收益有限</div>
+            </div>
+        </div>
+        <div class="legend-actions">
+            <button class="dc-btn main" id="legend-ok" disabled>我已阅读 (5)</button>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+
+const MDIR = '/data/adb/modules/force_system_webview';
+const DATA = '/data/adb/force_webview';
+let config = null, status = null, busy = false;
+
+const $ = id => document.getElementById(id);
+
+/* 浮动菜单放在 body 根层，避免被弹窗或页面容器裁剪。 */
+const fabRoot = document.querySelector('.fab-area');
+if (fabRoot && fabRoot.parentElement !== document.body) document.body.appendChild(fabRoot);
+
+/* 实验性二级弹窗必须位于 body 根层，避免被 pager/page 的动画层裁剪。 */
+['scrim', 'scan-modal', 'legend-sheet'].forEach(id => {
+    const node = $(id);
+    if (node && node.parentElement !== document.body) document.body.appendChild(node);
+});
+
+/* ksu 桥接 */
+let bridgeReady = null;
+function ensureBridge() {
+    if (bridgeReady !== null) return bridgeReady;
+    bridgeReady = new Promise(resolve => {
+        const t0 = Date.now();
+        (function check() {
+            if (window.ksu && typeof window.ksu.exec === 'function') return resolve(true);
+            if (Date.now() - t0 > 3000) return resolve(false);
+            setTimeout(check, 120);
+        })();
+    });
+    return bridgeReady;
+}
+async function exec(cmd) {
+    const ok = await ensureBridge();
+    if (!ok) throw new Error('接口未就绪');
+    const r = await window.ksu.exec(cmd);
+    return typeof r === 'string' ? r : ((r && r.stdout) || '');
+}
+
+function toast(msg, err = false, dur = 2600) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.className = 'toast show' + (err ? ' err' : '');
+    clearTimeout(t._h);
+    t._h = setTimeout(() => t.className = 'toast', dur);
+}
+
+/* 主题三态 */
+function setDark(on) {
+    document.documentElement.classList.toggle('dark', on);
+    const m = document.getElementById('meta-theme');
+    if (m) m.setAttribute('content', on ? '#121317' : '#FAF8FF');
+}
+function themeLabel(mode) {
+    return mode === 'auto' ? '自动' : mode === 'dark' ? '深色' : '浅色';
+}
+function applyTheme(mode, silent) {
+    localStorage.setItem('fsw_theme', mode);
+    let dark = false;
+    if (mode === 'auto') {
+        dark = !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (!window.matchMedia) {
+            try {
+                const probe = document.createElement('div');
+                probe.style.cssText = 'position:absolute;visibility:hidden;background:var(--surface,rgb(255,255,255))';
+                document.body.appendChild(probe);
+                const c = getComputedStyle(probe).backgroundColor;
+                probe.remove();
+                const m = c.match(/\d+/g);
+                if (m) { const [r, g, b] = m.map(Number); dark = (0.2126*r + 0.7152*g + 0.0722*b) < 110; }
+            } catch (e) {}
+        }
+    } else dark = mode === 'dark';
+    setDark(dark);
+    const b = document.getElementById('b-theme-t');
+    if (b) b.textContent = themeLabel(mode);
+    if (!silent) toast(mode === 'auto' ? '已切换为跟随系统' : mode === 'dark' ? '已切换深色' : '已切换浅色');
+}
+let curTheme = localStorage.getItem('fsw_theme');
+if (curTheme !== 'auto' && curTheme !== 'dark' && curTheme !== 'light') curTheme = 'auto';
+applyTheme(curTheme, true);
+if (window.matchMedia) {
+    try {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+            if (localStorage.getItem('fsw_theme') === 'auto') setDark(e.matches);
+        });
+    } catch (e) {}
+}
+$('b-theme').addEventListener('click', () => {
+    const order = ['auto', 'dark', 'light'];
+    const cur = localStorage.getItem('fsw_theme') || 'auto';
+    applyTheme(order[(order.indexOf(cur) + 1) % 3]);
+});
+const topMenu = $('top-menu');
+$('b-top-menu').addEventListener('click', e => {
+    e.stopPropagation();
+    topMenu.classList.toggle('open');
+});
+document.addEventListener('click', e => {
+    if (topMenu.classList.contains('open') && !topMenu.contains(e.target)) topMenu.classList.remove('open');
+});
+$('b-theme').addEventListener('click', () => topMenu.classList.remove('open'));
+$('b-info').addEventListener('click', () => topMenu.classList.remove('open'));
+
+/* 概览↔应用 横滑切换 */
+(function swipeTabs() {
+    let x0 = null, y0 = null;
+    const pages = document.querySelector('.pager');
+    if (!pages) return;
+    pages.addEventListener('touchstart', (e) => {
+        x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
+    }, { passive: true });
+    pages.addEventListener('touchend', (e) => {
+        if (x0 === null) return;
+        const dx = e.changedTouches[0].clientX - x0;
+        const dy = e.changedTouches[0].clientY - y0;
+        x0 = null;
+        if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;  // 横向明显才切
+        const cur = [...document.querySelectorAll('.seg button')].findIndex(b => b.classList.contains('on'));
+        const target = dx < 0 ? cur + 1 : cur - 1;
+        if (target < 0 || target > 1) return;
+        document.querySelectorAll('.seg button')[target].click();
+    }, { passive: true });
+})();
+
+/* Tab 切换 */
+const tabBtns = document.querySelectorAll('.seg button'), pages = [ $('pg0'), $('pg1') ];
+const fabInitial = document.querySelector('.fab-area');
+if (fabInitial) fabInitial.classList.toggle('app-visible', document.querySelector('.seg button.on')?.dataset.i === '1');
+tabBtns.forEach(b => b.addEventListener('click', () => {
+    const idx = +b.dataset.i;
+    const cur = [...tabBtns].findIndex(x => x.classList.contains("on"));
+    if (idx === cur) return;
+    pages[cur].classList.add('leaving');
+    tabBtns.forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    pages.forEach((p, i) => p.classList.toggle('on', i === idx));
+    const fab = document.querySelector('.fab-area');
+    if (fab) {
+        fab.classList.toggle('app-visible', idx === 1);
+        if (idx !== 1) fab.classList.remove('open');
+    }
+    pages[cur].classList.remove('leaving');
+}));
+
+/* 返回手势 */
+const backStack = [];
+function backPush(close) {
+    backStack.push(close);
+    history.pushState({ fswBack: backStack.length }, '');
+}
+function backPop() {
+    if (backStack.length) {
+        const close = backStack.pop();
+        try { close(); } catch (e) {}
+        return true;
+    }
+    return false;
+}
+window.addEventListener('popstate', () => {
+    if (!backPop()) history.pushState({ fswBack: 0 }, '');
+});
+
+/* 弹层 */
+function openSheet(id) {
+    $('scrim').classList.add('show');
+    $(id).classList.add('show');
+    document.body.classList.add('sheet-open');
+    backPush(closeSheets);
+}
+function closeSheets() {
+    $('scrim').classList.remove('show');
+    document.querySelectorAll('.sheet').forEach(s => s.classList.remove('show'));
+    document.body.classList.remove('sheet-open');
+    if (backStack.length && backStack[backStack.length - 1] === closeSheets) backStack.pop();
+}
+$('scrim').addEventListener('click', e => { if (!e.defaultPrevented) closeSheets(); });
+document.querySelectorAll('[data-x]').forEach(b => b.addEventListener('click', closeSheets));
+function showText(title, content, isHtml = false) {
+    $('sh-text-t').textContent = title;
+    if (isHtml) $('sh-text-b').innerHTML = content;
+    else $('sh-text-b').textContent = content;
+    openSheet('sh-text');
+}
+/* 下拉关闭 */
+document.querySelectorAll('.grab').forEach(g => {
+    const sheet = g.closest('.sheet');
+    let y0 = 0, dy = 0, drag = false;
+    g.addEventListener('touchstart', e => {
+        drag = true; y0 = e.touches[0].clientY; dy = 0;
+        sheet.classList.add('dragging');
+    }, { passive: true });
+    g.addEventListener('touchmove', e => {
+        if (!drag) return;
+        dy = Math.max(0, e.touches[0].clientY - y0);
+        sheet.style.transform = `translateY(${dy}px)`;
+    }, { passive: true });
+    const end = () => {
+        if (!drag) return;
+        drag = false;
+        sheet.classList.remove('dragging');
+        sheet.style.transform = '';
+        if (dy > sheet.offsetHeight * 0.25) closeSheets();
+    };
+    g.addEventListener('touchend', end);
+    g.addEventListener('touchcancel', end);
+});
+
+/* 读写配置 */
+async function loadConfig() {
+    const r = await fetch('config.json?' + Date.now());
+    if (!r.ok) throw new Error('配置读取失败');
+    config = await r.json();
+    if (!Array.isArray(config.ignored)) config.ignored = [];
+}
+async function loadStatus() {
+    const r = await fetch('status.json?' + Date.now());
+    if (!r.ok) throw new Error('状态读取失败');
+    status = await r.json();
+}
+function shq(s) { return "'" + String(s).replace(/'/g, "'\\''") + "'"; }
+/* 首次使用状态保存在模块目录；卸载模块后该文件会随模块移除。 */
+const ONBOARDING_FILE = MDIR + '/webroot/onboarding.json';
+let onboarding = { disclaimer: false, experimental: false, scanLegend: false, selectAck: false };
+async function saveOnboarding() {
+    try {
+        await exec('printf %s ' + shq(JSON.stringify(onboarding)) + ' > ' + ONBOARDING_FILE + ' && chmod 644 ' + ONBOARDING_FILE);
+    } catch (e) {}
+}
+const onboardingReady = (async () => {
+    try {
+        const r = await fetch('onboarding.json?' + Date.now(), { cache: 'no-store' });
+        if (r.ok) onboarding = { ...onboarding, ...(await r.json()) };
+    } catch (e) {}
+})();
+async function saveConfig() {
+    const json = JSON.stringify(config, null, 2);
+    await exec('printf %s ' + shq(json) + ' > ' + DATA + '/config.json && cp ' + DATA + '/config.json ' + MDIR + '/webroot/config.json');
+}
+
+/* 概览 */
+const kb2h = k => {
+    k = +k || 0;
+    if (k >= 1048576) return (k/1048576).toFixed(1) + ' GB';
+    if (k >= 1024) return (k/1024).toFixed(1) + ' MB';
+    return k + ' KB';
+};
+function renderOverview() {
+    if (!status) return;
+    const a = status.active || 0;
+    $('chip-ver').textContent = status.version || '';
+    $('abt-ver').textContent = (status.version || 'v2.0') + ' · 作者 ygxx';
+    $('h-big').textContent = '😄工作中';
+    $('h-sub').textContent = a > 0 ? `${a} 个应用已强制使用系统内核` : '尚未启用管控';
+    $('g-root').textContent = status.root || '未知';
+    $('g-wv').textContent = 'v' + (status.webview || '未知');
+    $('g-dev').textContent = status.device || '未知';
+    $('g-os').textContent = '安卓 ' + (status.android || '?');
+
+    if ($('abt-apps')) {
+        $('abt-apps').textContent = a;
+        $('abt-wv').textContent = 'v' + (status.webview || '?');
+        const bk0 = +status.backupKB || 0;
+        $('abt-saved').textContent = bk0 >= 1048576 ? (bk0/1048576).toFixed(1) + ' GB' : Math.round(bk0/1024) + ' MB';
+    }
+
+    const bk = +status.backupKB || 0;
+    const du = +status.dataUsedKB || 0, dt = +status.dataTotalKB || 1;
+    const bp = Math.min(100, bk/dt*100);
+    $('g-bk-p').textContent = bp.toFixed(2) + '%';
+    $('g-bk').textContent = kb2h(bk);
+    $('bar-bk').style.width = bp.toFixed(2) + '%';
+    const dp = Math.min(100, du/dt*100);
+    $('g-dt-p').textContent = dp.toFixed(1) + '%';
+    $('g-dt').textContent = kb2h(du) + ' / ' + kb2h(dt);
+    $('bar-dt').style.width = dp.toFixed(1) + '%';
+}
+
+/* 应用列表 */
+let dirtyScheduled = false;
+function updateDirty() {
+    if (dirtyScheduled) return;
+    dirtyScheduled = true;
+    requestAnimationFrame(() => {
+        dirtyScheduled = false;
+        const dirty = [...document.querySelectorAll('#list input')].some(cb => cb.checked !== (cb.dataset.init === 'true'));
+        const b = document.getElementById('b-fab'); if (b) b.classList.toggle('dirty', dirty);
+    });
+}
+
+function renderList() {
+    const box = $('list');
+    const st = (status && status.apps) || {};
+    const entries = Object.entries(config.apps).sort((x, y) => {
+        const sx = st[x[0]] ? 1 : 0, sy = st[y[0]] ? 1 : 0;
+        if (sx !== sy) return sy - sx;
+        const ex = config.apps[x[0]].enabled ? 1 : 0, ey = config.apps[y[0]].enabled ? 1 : 0;
+        return ey - ex;
+    });
+    const existing = {};
+    box.querySelectorAll('.arow').forEach(r => { existing[r.dataset.pkg] = r; });
+    const sameSet = Object.keys(existing).length === entries.length && entries.every(([pkg]) => existing[pkg]);
+    if (sameSet) {
+        for (const [pkg] of entries) {
+            const row = existing[pkg];
+            if (!row) continue;
+            const active = st[pkg] === true;
+            const tag = row.querySelector('.tag');
+            if (tag) { tag.textContent = active ? '生效中' : '未生效'; tag.className = 'tag' + (active ? '' : ' dim'); }
+            const cb = row.querySelector('input');
+            if (cb) { cb.checked = active; cb.dataset.init = String(active); }
+        }
+        for (const [pkg] of entries) {
+            if (existing[pkg]) box.appendChild(existing[pkg]);
+        }
+        updateDirty();
+        return;
+    }
+    box.innerHTML = '';
+    for (const [pkg, info] of entries) {
+        const active = st[pkg] === true;
+        const row = document.createElement('div');
+        row.className = 'arow';
+        row.dataset.pkg = pkg;
+        row.innerHTML = `
+            <div class="aicon"><img src="ksu://icon/${pkg}" alt="" onerror="this.parentNode.classList.add('noimg')" loading="lazy"></div>
+            <div class="atx">
+                <div class="aname"><span>${info.name}</span><span class="tag ${active ? '' : 'dim'}">${active ? '生效中' : '未生效'}</span></div>
+                <div class="apkg">${pkg}</div>
+            </div>
+            <label class="sw" onclick="event.stopPropagation()">
+                <input type="checkbox" data-pkg="${pkg}" ${active ? 'checked' : ''} data-init="${active}">
+                <span class="tr"></span><span class="th"></span>
+            </label>`;
+        box.appendChild(row);
+        row.addEventListener('click', () => row.querySelector('input').click());
+        // 长按进详情（与应用列表共用三级详情页）
+        let lpTimer = null, lpFired = false;
+        row.addEventListener('touchstart', (e) => {
+            lpFired = false;
+            lpTimer = setTimeout(async () => {
+                lpFired = true;
+                const st = (status && status.apps) || {};
+                const active = st[pkg] === true;
+                const cfgInfo = config.apps[pkg] || {};
+                let dirs = (cfgInfo.dirs || []).join(' ');
+                let mstat = active ? '已生效' : '';
+                let bkmb = 0;
+                if (active) {
+                    mstat = '已生效';
+                    try {
+                        const r = await exec('du -sm ' + DATA + '/backup/' + pkg + ' 2>/dev/null | cut -f1');
+                        bkmb = parseInt((r || '').trim(), 10) || 0;
+                    } catch (e2) {}
+                } else if (!dirs) {
+                    // 未添加的应用：从上次扫描缓存取特征目录
+                    try {
+                        const raw = localStorage.getItem('fsw_last_scan');
+                        const o = raw ? JSON.parse(raw) : null;
+                        const it = o && Array.isArray(o.data) ? o.data.find(x => x.pkg === pkg) : null;
+                        if (it) { dirs = it.dirs || ''; mstat = '未管理'; }
+                    } catch (e2) {}
+                }
+                showDetail(pkg, active ? '已生效' : '未管控', dirs, mstat || '未管理', bkmb);
+                if (navigator.vibrate) navigator.vibrate(15);
+            }, 500);
+        }, { passive: true });
+        const lpCancel = () => { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } };
+        row.addEventListener('touchend', lpCancel);
+        row.addEventListener('touchmove', lpCancel);
+        row.addEventListener('touchcancel', lpCancel);
+        row.addEventListener('contextmenu', (e) => { if (lpFired) e.preventDefault(); });
+        row.querySelector('input').addEventListener('change', () => {
+    row.classList.remove('flash');
+    requestAnimationFrame(() => requestAnimationFrame(() => row.classList.add('flash')));
+    updateDirty();
+});
+    }
+    updateDirty();
+}
+$('q').addEventListener('input', e => {
+    const s = e.target.value.toLowerCase().trim();
+    document.querySelectorAll('.arow').forEach(r => {
+        const n = r.querySelector('.aname span').textContent.toLowerCase();
+        r.classList.toggle('hide', !(n.includes(s) || r.dataset.pkg.toLowerCase().includes(s)));
+});
+    const visible = document.querySelectorAll('.arow:not(.hide)').length;
+    let empty = document.getElementById('empty-hint');
+    if (!visible && s) {
+        if (!empty) { empty = document.createElement('div'); empty.id = 'empty-hint'; empty.className = 'loadbox'; empty.textContent = '没有匹配的应用'; $('list').appendChild(empty); }
+    } else if (empty) empty.remove();
+});
+
+const fabArea = document.querySelector('.fab-area');
+const searchDialog = $('app-search-dialog');
+const closeAppSearch = () => { searchDialog.classList.remove('show'); fabArea.classList.remove('search-hidden'); $('q').blur(); };
+const clearAppSearch = () => { const q = $('q'); q.value = ''; q.dispatchEvent(new Event('input', { bubbles: true })); };
+$('b-search').addEventListener('click', e => {
+    e.stopPropagation(); fabArea.classList.remove('open', 'searching'); fabArea.classList.add('search-hidden');
+    searchDialog.classList.add('show'); requestAnimationFrame(() => $('q').focus());
+});
+$('b-search-clear').addEventListener('click', () => { clearAppSearch(); $('q').focus(); });
+$('app-search-form').addEventListener('submit', e => { e.preventDefault(); closeAppSearch(); });
+searchDialog.addEventListener('click', e => { if (e.target === searchDialog) closeAppSearch(); });
+$('b-fab').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const wasOpen = fabArea.classList.contains('open');
+    fabArea.classList.toggle('open');
+    if (wasOpen) fabArea.classList.remove('searching');
+});
+document.addEventListener('click', (e) => {
+    const area = document.querySelector('.fab-area');
+    if (area.classList.contains('open') && !area.contains(e.target)) { area.classList.remove('open', 'searching'); }
+});
+const SEL_VC = '1';
+$('b-sel-safe').addEventListener('click', () => {
+    if (!onboarding.selectAck) {
+        const sheet = $('legend-sheet');
+        const savedTitle = document.querySelector('.legend-title').textContent;
+        const savedBody = document.querySelector('.legend-body').innerHTML;
+        document.querySelector('.legend-title').textContent = '全选说明';
+        document.querySelector('.legend-body').innerHTML =
+            '<div class="legend-row"><div class="legend-txt" style="font-size:13.5px">默认勾选全部应用，但会自动跳过「已知风险」应用（微信、企业微信、高德地图、王者营地等），这些应用强制系统内核后可能闪退或功能异常。</div></div>';
+        const ok = $('legend-ok');
+        const actions = document.querySelector('.legend-actions');
+        $('legend-close').style.display = 'none';
+        actions.style.display = 'flex';
+        ok.disabled = true;
+        let n = 3;
+        ok.textContent = `我已阅读 (${n})`;
+        const t = setInterval(() => {
+            n--;
+            ok.textContent = `我已阅读 (${n})`;
+            if (n <= 0) { clearInterval(t); ok.disabled = false; ok.textContent = '我已阅读'; }
+        }, 1000);
+        ok.onclick = () => {
+            clearInterval(t);
+            onboarding.selectAck = true; saveOnboarding();
+            sheet.classList.remove('show');
+            document.querySelector('.legend-title').textContent = savedTitle;
+            document.querySelector('.legend-body').innerHTML = savedBody;
+            resetLegendClose();
+            document.querySelectorAll('#list input').forEach(cb => {
+                cb.checked = getCompat(cb.dataset.pkg) !== 'red';
+            });
+            toast('已全选（排除已知风险）');
+            updateDirty();
+        };
+        sheet.classList.add('show');
+        return;
+    }
+    document.querySelectorAll('#list input').forEach(cb => {
+        cb.checked = getCompat(cb.dataset.pkg) !== 'red';
+    });
+    toast('已全选（排除已知风险）');
+    updateDirty();
+});
+
+$('b-stop').addEventListener('click', async () => {
+    const cs = [...document.querySelectorAll('#list input:checked')];
+    if (!cs.length) return toast('没有勾选的应用', true);
+    $('b-stop').disabled = true;
+    let ok = 0;
+    for (const cb of cs) { try { await exec('am force-stop ' + cb.dataset.pkg); ok++; } catch (e) {} }
+    $('b-stop').disabled = false;
+    toast(`已停止 ${ok}/${cs.length} 个应用`, ok === 0);
+});
+
+/* 应用配置 */
+const nextFrame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+$('b-save').addEventListener('click', async () => {
+    if (busy) return;
+    busy = true;
+    const btn = $('b-save'), t = $('b-apply-t');
+    const setLoading = on => {
+        btn.disabled = on;
+        btn.classList.toggle('loading', on);
+        t.textContent = on ? '保存中' : '保存';
+    };
+    try {
+        document.querySelectorAll('#list input').forEach(cb => cb.disabled = true);
+        await loadConfig();
+        let changed = 0;
+        for (const cb of document.querySelectorAll('#list input')) {
+            const init = cb.dataset.init === 'true';
+            if (cb.checked !== init) {
+                config.apps[cb.dataset.pkg].enabled = cb.checked;
+                changed++;
+            }
+        }
+        if (!changed) { toast('开关无变化'); return; }
+        setLoading(true);
+        await nextFrame();
+        await new Promise(r => setTimeout(r, 40));
+        await saveConfig();
+        await nextFrame();
+        await exec('sh ' + MDIR + '/service.sh apply');
+        toast('已应用');
+        await nextFrame();
+        await exec('sh ' + MDIR + '/status.sh');
+        await loadStatus();
+        await nextFrame();
+        renderList(); renderOverview();
+    } catch (e) {
+        toast('应用失败：' + e.message, true, 5000);
+    } finally {
+        setLoading(false);
+        busy = false;
+        document.querySelectorAll('#list input').forEach(cb => cb.disabled = false);
+    }
+});
+
+/* 实验性功能解锁 */
+const EXP_KEY = 'fsw_experimental_unlocked_v2';
+function setExperimentalVisible(on) {
+    const tools = $('experimental-tools');
+    if (tools) tools.classList.toggle('show', on);
+}
+function showExperimentalUnlockDialog() {
+    const dialog = $('experimental-unlock-dialog');
+    dialog.classList.add('show');
+    const close = () => dialog.classList.remove('show');
+    $('b-experimental-unlock-ok').onclick = close;
+    dialog.onclick = e => { if (e.target === dialog) close(); };
+}
+function launchFireworks() {
+    const box = $('fireworks');
+    box.querySelectorAll('.firework-particle').forEach(x => x.remove());
+    const colors = ['#FFD166', '#FF7B9C', '#8FE3CF', '#A9B8FF', '#FFFFFF'];
+    const bursts = [[25,30],[74,27],[50,54],[20,72],[80,70]];
+    for (const [bx, by] of bursts) {
+        const core = document.createElement('i');
+        core.className = 'firework-particle firework-core';
+        core.style.left = bx + '%'; core.style.top = by + '%';
+        core.style.setProperty('--fc', colors[(bx + by) % colors.length]);
+        box.appendChild(core);
+        for (let i = 0; i < 32; i++) {
+            const a = Math.PI * 2 * i / 18 + Math.random() * .18;
+            const d = 90 + Math.random() * 150;
+            const dot = document.createElement('i');
+            dot.className = 'firework-particle';
+            dot.style.left = bx + '%'; dot.style.top = by + '%';
+            dot.style.setProperty('--x', Math.cos(a) * d + 'px');
+            dot.style.setProperty('--y', Math.sin(a) * d + 'px');
+            dot.style.setProperty('--fc', colors[(i + bx) % colors.length]);
+            box.appendChild(dot);
+        }
+    }
+    box.classList.remove('show');
+    void box.offsetWidth;
+    box.classList.add('show');
+    setTimeout(() => { box.classList.remove('show'); showExperimentalUnlockDialog(); }, 1850);
+}
+let expTapCount = 0, expTapTimer = null;
+const unlockHero = $('hero-unlock');
+const heroPressOn = () => { if (!onboarding.experimental) unlockHero.classList.add('pressing'); };
+const heroPressOff = () => unlockHero.classList.remove('pressing');
+unlockHero.addEventListener('pointerdown', heroPressOn);
+unlockHero.addEventListener('pointerup', heroPressOff);
+unlockHero.addEventListener('pointercancel', heroPressOff);
+unlockHero.addEventListener('pointerleave', heroPressOff);
+unlockHero.addEventListener('click', () => {
+    if (onboarding.experimental) return;
+    unlockHero.classList.remove('hit');
+    void unlockHero.offsetWidth;
+    unlockHero.classList.add('hit');
+    expTapCount++;
+    clearTimeout(expTapTimer);
+    expTapTimer = setTimeout(() => { expTapCount = 0; }, 850);
+    if (expTapCount < 5) return;
+    expTapCount = 0;
+    onboarding.experimental = true; saveOnboarding();
+    unlockHero.classList.remove('unlock-target', 'pressing');
+    setExperimentalVisible(true);
+    launchFireworks();
+});
+let experimentalOn = false;
+onboardingReady.then(() => { experimentalOn = onboarding.experimental; if (experimentalOn) unlockHero.classList.remove('unlock-target'); setExperimentalVisible(experimentalOn); });
+
+/* 扫描 */
+const APP_NAMES = {
+    'com.aliyun.tongyi': '千问', 'com.quark.clouddrive': '夸克网盘', 'com.quark.browser': '夸克浏览器',
+    'com.xunmeng.pinduoduo': '拼多多', 'com.tencent.wework': '企业微信', 'com.tencent.wemeet.app': '腾讯会议',
+    'com.greenpoint.android.mc10086.activity': '中国移动', 'com.xiaomi.shop': '小米商城',
+    'com.ss.android.ugc.aweme': '抖音', 'com.ss.android.ugc.aweme.lite': '抖音极速版',
+    'com.ss.android.ugc.aweme.yyds': '抖音商城版', 'com.ss.android.article.news': '今日头条',
+    'com.ss.android.article.lite': '今日头条极速版', 'com.smile.gifmaker': '快手', 'com.kuaishou.nebula': '快手极速版',
+    'com.baidu.searchbox': '百度', 'com.baidu.BaiduMap': '百度地图', 'com.baidu.netdisk': '百度网盘',
+    'com.baidu.haokan': '好看视频', 'com.autonavi.minimap': '高德地图', 'com.taobao.taobao': '淘宝',
+    'com.taobao.idlefish': '闲鱼', 'com.tmall.wireless': '天猫', 'com.jingdong.app.mall': '京东',
+    'com.jd.jrapp': '京东金融', 'com.sankuai.meituan': '美团', 'com.sankuai.meituan.takeoutnew': '美团外卖',
+    'com.dianping.v1': '大众点评', 'com.sdu.didi.psnger': '滴滴出行', 'com.eg.android.AlipayGphone': '支付宝',
+    'com.tencent.mm': '微信', 'com.tencent.mobileqq': 'QQ', 'com.alibaba.android.rimet': '钉钉',
+    'com.tencent.gamehelper.smoba': '王者营地',
+    'com.netease.cloudmusic': '网易云音乐', 'com.tencent.qqmusic': 'QQ音乐', 'com.kugou.android': '酷狗音乐',
+    'com.ximalaya.ting.android': '喜马拉雅', 'com.sina.weibo': '微博', 'com.zhihu.android': '知乎',
+    'com.xingin.xhs': '小红书', 'com.bilibili.app': '哔哩哔哩', 'tv.danmaku.bili': '哔哩哔哩',
+    'com.douban.frodo': '豆瓣', 'com.UCMobile': 'UC浏览器', 'com.Qunar': '去哪儿',
+    'com.ctrip.android.view': '携程旅行', 'com.MobileTicket': '12306', 'com.tencent.qqlive': '腾讯视频',
+    'com.ss.android.article.video': '西瓜视频', 'com.hunantv.imgo.activity': '芒果TV',
+    'com.netease.mail': '网易邮箱', 'com.dragon.read': '番茄小说', 'com.moji.mjweather': '墨迹天气',
+    'com.ICBC': '工商银行', 'com.android.bankabc': '农业银行', 'com.unionpay': '云闪付',
+    'com.achievo.vipshop': '唯品会', 'com.suning.mobile.ebuy': '苏宁易购', 'com.kaola': '考拉海购',
+    'com.xunlei.downloadprovider': '迅雷', 'com.eastmoney.android.fund': '天天基金',
+    'com.hexin.plat.android': '同花顺', 'com.tencent.tmgp.pubgmhd': '和平精英',
+    'com.tencent.tmgp.codev': '无畏契约：源能行动', 'com.miHoYo.Yuanshen': '原神', 'com.netease.dwrg': '蛋仔派对',
+    'mark.via': 'Via浏览器', 'com.coolapk.market': '酷安'
+};
+function appName(pkg) { return APP_LABELS[pkg] || APP_NAMES[pkg] || pkg; }
+const COMPAT = {
+    green:  { label: '已适配', desc: '实测大部分功能正常，可放心管控' },
+    yellow: { label: '未验证', desc: '未经验证，强制后可能出现页面异常，请自行测试' },
+    red:    { label: '已知风险', desc: '强制后地图、在线文档等功能会异常，不建议管控' },
+};
+const PKG_COMPAT = {
+        'com.aliyun.tongyi': 'green',              // 千问
+    'com.eg.android.AlipayGphone': 'green',    // 支付宝
+    'com.greenpoint.android.mc10086.activity': 'green', // 中国移动
+    'com.jingdong.app.mall': 'green',          // 京东
+    'com.luna.music': 'green',                 // 汽水音乐
+    'com.ss.android.ugc.aweme': 'green',       // 抖音
+    'com.taobao.idlefish': 'green',            // 闲鱼
+    'com.taobao.taobao': 'green',              // 淘宝
+    'com.tencent.mobileqq': 'green',           // QQ
+    'com.tencent.wemeet.app': 'green',         // 腾讯会议
+    'com.xingin.xhs': 'green',                 // 小红书
+    'com.xunmeng.pinduoduo': 'green',          // 拼多多
+    // 已知风险
+    'com.tencent.mm': 'red',
+    'com.tencent.wework': 'red',
+    'com.autonavi.minimap': 'red',
+    'com.tencent.gamehelper.smoba': 'red',
+};
+function getCompat(pkg) { return PKG_COMPAT[pkg] || 'yellow'; }
+
+const LEGEND_VC = '3';
+$('b-scan').addEventListener('click', async () => {
+    await onboardingReady;
+    if (!onboarding.scanLegend) { showLegendForced(); return; }
+    const modal = $('scan-modal'), loading = $('scan-loading'), results = $('scan-results');
+    const scrim = $('scrim'), progress = $('scan-progress-bar'), progressText = $('scan-progress-text');
+    const progressBox = progress && progress.parentElement;
+    let scanCancelled = false, scanFinished = false;
+    const resetScan = () => {
+        scrim.classList.remove('show');
+        modal.classList.remove('show', 'expand');
+        if (progress) progress.style.width = '0%';
+        if (progressBox) progressBox.setAttribute('aria-valuenow', '0');
+        setTimeout(() => { loading.style.display = 'flex'; results.classList.remove('show'); }, 300);
+    };
+    const cancelDialog = $('scan-cancel-dialog');
+    const closeResult = () => { resetScan(); };
+    const requestCancel = () => {
+        if (scanFinished) { closeResult(); return; }
+        if (cancelDialog.classList.contains('show')) return;
+        cancelDialog.classList.add('show');
+    };
+    const cancelNow = () => { scanCancelled = true; cancelDialog.classList.remove('show'); exec('p=$(cat /data/adb/force_webview/.scan-lock/pid 2>/dev/null); [ -n "$p" ] && kill "$p" 2>/dev/null || true'); resetScan(); };
+    $('scan-cancel-keep').onclick = () => cancelDialog.classList.remove('show');
+    $('scan-cancel-confirm').onclick = cancelNow;
+    cancelDialog.onclick = e => { if (e.target === cancelDialog) cancelDialog.classList.remove('show'); };
+    const scanScrimHandler = e => {
+        if (!modal.classList.contains('show')) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (scanFinished) closeResult(); else requestCancel();
+    };
+    if (window.fswScanScrimHandler) scrim.removeEventListener('click', window.fswScanScrimHandler, true);
+    window.fswScanScrimHandler = scanScrimHandler;
+    scrim.addEventListener('click', scanScrimHandler, true);
+
+    scrim.classList.add('show'); modal.classList.add('show'); loading.style.display = 'flex';
+    results.classList.remove('show'); modal.classList.remove('expand');
+    if (progress) progress.style.width = '0%';
+    if (progressBox) progressBox.setAttribute('aria-valuenow', '0');
+    if (progressText) progressText.textContent = '正在分析…';
+    backPush(requestCancel);
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+    const btnScan = $('b-scan');
+    if (btnScan.disabled) return;
+    btnScan.disabled = true;
+    const scanStartTs = Date.now();
+    try {
+        await exec('sh ' + MDIR + '/scan.sh > /dev/null 2>&1 &');
+        let scanData = null;
+        for (let i = 0; i < 120; i++) {
+            await new Promise(r => setTimeout(r, 200));
+            if (scanCancelled) break;
+            try {
+                const r = await fetch('scan-result.txt?' + Date.now(), { cache: 'no-store' });
+                if (!r.ok) continue;
+                const text = await r.text();
+                const busyM = text.match(/^BUSY\|(\d+)$/m);
+                if (busyM && (busyM[1] * 1000) > (scanStartTs - 5000)) throw new Error('上一次扫描还在进行，请稍候几秒再试');
+                const startedM = text.match(/^STARTED\|\d+\|(\d+)$/m);
+                const startedFresh = startedM && (startedM[1] * 1000) > (scanStartTs - 5000);
+                if (!startedFresh) continue;
+                const progressMatches = [...text.matchAll(/^PROGRESS\|(\d+)\|(\d+)$/gm)];
+                if (progressMatches.length) {
+                    const p = progressMatches[progressMatches.length - 1], done = +p[1], total = +p[2];
+                    const percent = total ? Math.min(99, Math.round(done * 100 / total)) : 0;
+                    if (progress) progress.style.width = percent + '%';
+                    if (progressBox) progressBox.setAttribute('aria-valuenow', String(percent));
+                    if (progressText) progressText.textContent = total ? `正在分析… ${done} / ${total}` : '正在分析…';
+                }
+                if (text.includes('DONE|')) {
+                    const lines = text.trim().split('\n'), doneIdx = [];
+                    lines.forEach((ln, n) => { if (ln.startsWith('DONE|')) doneIdx.push(n); });
+                    const last = doneIdx[doneIdx.length - 1], start = doneIdx.length > 1 ? doneIdx[doneIdx.length - 2] + 1 : 0;
+                    scanData = []; const seen = new Set();
+                    for (let n = start; n < last; n++) {
+                        const parts = lines[n].split('|'), pkg = parts[0];
+                        if (!pkg || pkg === 'PROGRESS' || pkg === 'STARTED' || pkg === 'BUSY' || seen.has(pkg)) continue;
+                        seen.add(pkg); scanData.push({ pkg, kernel: parts[1] || '', mstat: parts[2] || '', dirs: (parts[3] || '').trim(), game: (parts[4] || '').trim() === 'game', bkmb: parseInt(parts[5] || '0', 10) || 0, susp: (parts[6] || '').trim(), newDirs: (parts[7] || '').trim() });
+                    }
+                    break;
+                }
+            } catch (e) { if (e.message) throw e; }
+        }
+        if (scanData === null) { if (scanCancelled) return; throw new Error('扫描超时（应用较多时可能较慢，稍后再试）'); }
+        scanFinished = true;
+        if (progress) progress.style.width = '100%';
+        if (progressBox) progressBox.setAttribute('aria-valuenow', '100');
+        modal.classList.add('expand'); await new Promise(r => setTimeout(r, 350));
+        await loadKsuAppLabels(scanData);
+        loading.style.display = 'none'; results.classList.add('show'); renderScanResult(scanData);
+        try { localStorage.setItem('fsw_last_scan', JSON.stringify({ v: 2, ts: Date.now(), data: scanData })); updateLastScanBtn(); } catch (e) {}
+    } catch (e) {
+        toast('扫描失败: ' + e.message, true); resetScan();
+    } finally { btnScan.disabled = false; }
+});
+/* 扫描结果渲染 */
+const APP_LABELS = Object.create(null);
+async function loadKsuAppLabels(items) {
+    const pkgs = [...new Set(items.map(it => it.pkg).filter(Boolean))];
+    if (!pkgs.length || !window.ksu || typeof window.ksu.getPackagesInfo !== "function") return;
+    try {
+        const raw = await window.ksu.getPackagesInfo(JSON.stringify(pkgs));
+        const data = typeof raw === "string" ? JSON.parse(raw) : raw;
+        if (!Array.isArray(data)) return;
+        data.forEach(it => { if (it && it.packageName && typeof it.appLabel === "string" && it.appLabel.trim()) APP_LABELS[it.packageName] = it.appLabel.trim(); });
+    } catch (e) { console.warn("读取 KernelSU 应用名称失败", e); }
+}
+const COMPAT_RANK = { red: 0, yellow: 1, green: 2 };
+const byCompatDesc = (a, b) => (COMPAT_RANK[getCompat(a.pkg)] ?? 2) - (COMPAT_RANK[getCompat(b.pkg)] ?? 2);
+
+/* 分析结果：勾选状态与加入/合并/忽略操作 */
+let curScanData = null;
+let scanPick = null;
+const splitDirs = s => String(s || '').split(/\s+/).filter(Boolean);
+
+function initPick(scanData) {
+    scanPick = new Map();
+    for (const it of scanData) {
+        if (it.mstat === '未管理') {
+            scanPick.set(it.pkg, { kind: 'cand', on: true, dirs: new Set(splitDirs(it.dirs)), susp: new Set() });
+        } else if (splitDirs(it.newDirs).length) {
+            scanPick.set(it.pkg, { kind: 'add', on: true, dirs: new Set(splitDirs(it.newDirs)), susp: new Set() });
+        }
+    }
+}
+
+function scanBadge(it) {
+    if (it.mstat === '已生效') return '<span class="kernel-badge mstate"></span>';
+    if (it.mstat === '已配置') return '<span class="kernel-badge cfg"></span>';
+    if (it.mstat === '未管理') return '<span class="kernel-badge ' + (it.kernel !== '完整内核' ? 'partial' : '') + '"></span>';
+    return '';
+}
+
+function pickCardHtml(it) {
+    const s = scanPick.get(it.pkg);
+    const g = it.game ? '<span class="kernel-badge game"></span>' : '';
+    const ct = COMPAT[getCompat(it.pkg)];
+    const ctTag = ct ? '<span class="compat-tag ' + getCompat(it.pkg) + '"></span>' : '';
+    let chips = '';
+    if (s.kind === 'add') {
+        chips = splitDirs(it.newDirs).map(d => '<span class="dchip new">' + d + '</span>').join('');
+    } else {
+        chips = splitDirs(it.dirs).map(d => '<span class="dchip">' + d + '</span>').join('');
+        chips += splitDirs(it.susp).map(d => '<span class="dchip susp' + (s.susp.has(d) ? ' on' : '') + '" data-susp="' + d + '">? ' + d + '</span>').join('');
+    }
+    return '<div class="unmanaged-card pick' + (s.on ? '' : ' off') + '" data-pkg="' + it.pkg + '">' +
+        '<label class="pick-cb"><input type="checkbox"' + (s.on ? ' checked' : '') + '><span class="pick-box"></span></label>' +
+        '<div class="icon"><img src="ksu://icon/' + it.pkg + '" alt="" onerror="this.style.display=\'none\'"></div>' +
+        '<div class="info">' +
+        '<div class="name">' + appName(it.pkg) + scanBadge(it) + g + ctTag + '</div>' +
+        '<div class="pkg">' + it.pkg + '</div>' +
+        '<div class="dchip-wrap">' + chips + '</div>' +
+        '</div>' +
+        '<button class="pick-ig">忽略</button>' +
+        '</div>';
+}
+
+function renderScanResult(scanData) {
+    curScanData = scanData || [];
+    initPick(curScanData);
+    const body = $('scan-body');
+    const hasNd = it => splitDirs(it.newDirs).length > 0;
+    const unmanaged = curScanData.filter(it => it.mstat === '未管理').sort(byCompatDesc);
+    const addl = curScanData.filter(it => it.mstat !== '未管理' && hasNd(it)).sort(byCompatDesc);
+    const configured = curScanData.filter(it => it.mstat === '已配置' && !hasNd(it)).sort(byCompatDesc);
+    const managed = curScanData.filter(it => it.mstat === '已生效' && !hasNd(it)).sort(byCompatDesc);
+    const managedAll = curScanData.filter(it => it.mstat === '已生效');
+    const totalBk = managed.reduce((s, it) => s + (it.bkmb || 0), 0);
+
+    $('scan-count').textContent =
+        (unmanaged.length ? unmanaged.length + ' 个可加入 · ' : '') +
+        (addl.length ? addl.length + ' 个有新增目录 · ' : '') +
+        managedAll.length + ' 个管控中' +
+        (configured.length ? ' · ' + configured.length + ' 个待生效' : '');
+
+    let h = '';
+    if (unmanaged.length) {
+        h += '<div class="sec-h">可加入 · ' + unmanaged.length + ' 个（勾选后加入应用列表，默认不启用）</div>';
+        for (const it of unmanaged) { h += pickCardHtml(it); }
+    }
+    if (addl.length) {
+        h += '<div class="sec-h mid-t">新增目录 · ' + addl.length + ' 个（已配置，扫描到新内核目录）</div>';
+        for (const it of addl) { h += pickCardHtml(it); }
+    }
+    if (configured.length) {
+        h += '<div class="sec-h mid-t">已配置未生效 · ' + configured.length + ' 个（应用配置后生效）</div>';
+        for (const it of configured) { h += cardHtml(it, 'configured'); }
+    }
+    if (managed.length) {
+        h += '<div class="sec-h ok-t">管控中 · ' + managed.length + ' 个' + (totalBk ? ' · 共省 ' + totalBk + ' MB' : '') + '</div>';
+        for (const it of managed) { h += cardHtml(it, 'managed'); }
+    }
+    if (!h) h = '<div class="scan-empty">未发现任何内核特征</div>';
+    body.innerHTML = h;
+
+    body.querySelectorAll('.unmanaged-card').forEach(card => {
+        const pkg = card.dataset.pkg;
+        const it = curScanData.find(x => x.pkg === pkg);
+        const s = scanPick.get(pkg);
+        if (!s || !it) {
+            card.addEventListener('click', () => {
+                showDetail(card.dataset.pkg, card.dataset.kernel, card.dataset.dirs,
+                           card.dataset.mstat, card.dataset.bkmb || '0');
+            });
+            return;
+        }
+        const cb = card.querySelector('.pick-cb input');
+        const setOn = on => {
+            s.on = on;
+            cb.checked = on;
+            card.classList.toggle('off', !on);
+            syncScanFoot();
+        };
+        card.querySelector('.pick-cb').addEventListener('click', e => e.stopPropagation());
+        cb.addEventListener('change', () => setOn(cb.checked));
+        card.querySelectorAll('.dchip.susp').forEach(chip => {
+            chip.addEventListener('click', e => {
+                e.stopPropagation();
+                const d = chip.dataset.susp;
+                if (s.susp.has(d)) { s.susp.delete(d); chip.classList.remove('on'); }
+                else { s.susp.add(d); chip.classList.add('on'); }
+                if (!s.on) setOn(true); else syncScanFoot();
+            });
+        });
+        card.querySelector('.pick-ig').addEventListener('click', e => {
+            e.stopPropagation();
+            ignoreApp(pkg, s.kind);
+        });
+        card.addEventListener('click', () => {
+            const dirsStr = s.kind === 'add' ? it.newDirs : [...s.dirs, ...s.susp].join(' ');
+            showDetail(pkg, it.kernel || '未管控', dirsStr, it.mstat, it.bkmb || 0);
+        });
+    });
+    syncScanFoot();
+}
+
+function syncScanFoot() {
+    const foot = $('scan-foot');
+    if (!foot) return;
+    let nAdd = 0, nMerge = 0;
+    for (const s of (scanPick ? scanPick.values() : [])) {
+        if (!s.on) continue;
+        if (s.kind === 'cand') nAdd++; else nMerge++;
+    }
+    const bAdd = $('b-scan-add'), bMerge = $('b-scan-merge');
+    bAdd.style.display = nAdd ? '' : 'none';
+    bMerge.style.display = nMerge ? '' : 'none';
+    bAdd.disabled = !nAdd;
+    bMerge.disabled = !nMerge;
+    bAdd.textContent = '加入所选应用' + (nAdd ? '（' + nAdd + '）' : '');
+    bMerge.textContent = '合并所选目录' + (nMerge ? '（' + nMerge + '）' : '');
+    foot.style.display = (nAdd || nMerge) ? '' : 'none';
+}
+
+function persistScanCache() {
+    if (!curScanData) return;
+    try {
+        let ts = Date.now();
+        try {
+            const o = JSON.parse(localStorage.getItem('fsw_last_scan') || 'null');
+            if (o && o.ts) ts = o.ts;
+        } catch (e) {}
+        localStorage.setItem('fsw_last_scan', JSON.stringify({ v: 2, ts: ts, data: curScanData }));
+        updateLastScanBtn();
+    } catch (e) {}
+}
+
+async function addSelectedApps() {
+    const picks = [...(scanPick || [])].filter(([, s]) => s.kind === 'cand' && s.on);
+    if (!picks.length) return;
+    const btn = $('b-scan-add');
+    btn.disabled = true;
+    try {
+        await loadConfig();
+        const added = [];
+        for (const [pkg, s] of picks) {
+            const dirs = [...s.dirs, ...s.susp];
+            if (!dirs.length || config.apps[pkg]) continue;
+            config.apps[pkg] = { name: appName(pkg), enabled: false, dirs: dirs };
+            added.push(pkg);
+        }
+        if (!added.length) { toast('没有可加入的应用', true); return; }
+        await saveConfig();
+        renderList();
+        for (const pkg of added) {
+            const it = curScanData.find(x => x.pkg === pkg);
+            if (it) { it.mstat = '已配置'; it.susp = ''; it.newDirs = ''; }
+        }
+        persistScanCache();
+        renderScanResult(curScanData);
+        toast('已加入 ' + added.length + ' 个应用，可在应用页开启');
+    } catch (e) {
+        toast('加入失败：' + e.message, true);
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function mergeSelectedDirs() {
+    const picks = [...(scanPick || [])].filter(([, s]) => s.kind === 'add' && s.on);
+    if (!picks.length) return;
+    const btn = $('b-scan-merge');
+    btn.disabled = true;
+    try {
+        await loadConfig();
+        let nDirs = 0, needApply = false;
+        const merged = [];
+        for (const [pkg, s] of picks) {
+            let app = config.apps[pkg];
+            if (!app) {
+                // 备份区存在但配置缺失（如手动移除过）：按管控中状态补建
+                if (!s.dirs.size) continue;
+                app = config.apps[pkg] = { name: appName(pkg), enabled: true, dirs: [] };
+            }
+            const cur = new Set(app.dirs || []);
+            let added = 0;
+            for (const d of s.dirs) { if (!cur.has(d)) { cur.add(d); added++; } }
+            if (!added) continue;
+            app.dirs = [...cur];
+            nDirs += added;
+            if (app.enabled) needApply = true;
+            merged.push(pkg);
+        }
+        if (!nDirs) { toast('没有可合并的目录', true); return; }
+        await saveConfig();
+        if (needApply) {
+            try {
+                await exec('sh ' + MDIR + '/service.sh apply');
+                await exec('sh ' + MDIR + '/status.sh');
+                await loadStatus();
+            } catch (e) {}
+        }
+        renderList(); renderOverview();
+        for (const pkg of merged) {
+            const it = curScanData.find(x => x.pkg === pkg);
+            if (it) it.newDirs = '';
+        }
+        persistScanCache();
+        renderScanResult(curScanData);
+        toast('已合并 ' + nDirs + ' 个目录' + (needApply ? '，已应用配置' : ''));
+    } catch (e) {
+        toast('合并失败：' + e.message, true);
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function ignoreApp(pkg, kind) {
+    try {
+        await loadConfig();
+        if (!Array.isArray(config.ignored)) config.ignored = [];
+        if (!config.ignored.includes(pkg)) config.ignored.push(pkg);
+        await saveConfig();
+        if (kind === 'cand') {
+            curScanData = curScanData.filter(x => x.pkg !== pkg);
+        } else {
+            const it = curScanData.find(x => x.pkg === pkg);
+            if (it) it.newDirs = '';
+        }
+        persistScanCache();
+        renderScanResult(curScanData);
+        toast('已忽略「' + appName(pkg) + '」，可在顶部菜单恢复');
+    } catch (e) {
+        toast('忽略失败：' + e.message, true);
+    }
+}
+
+$('b-scan-add').addEventListener('click', addSelectedApps);
+$('b-scan-merge').addEventListener('click', mergeSelectedDirs);
+
+/* 上次扫描缓存 */
+function fmtScanTs(ts) {
+    const d = new Date(ts);
+    const p = n => String(n).padStart(2, '0');
+    return (d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+function updateLastScanBtn() {
+    const b = $('b-last-scan');
+    if (!b) return;
+    try {
+        const raw = localStorage.getItem('fsw_last_scan');
+        if (raw) {
+            const o = JSON.parse(raw);
+            if (o && Array.isArray(o.data) && o.data.length) {
+                b.textContent = '查看上次 · ' + fmtScanTs(o.ts);
+                b.classList.add('show');
+                return;
+            }
+        }
+    } catch (e) {}
+    b.classList.remove('show');
+}
+$('b-last-scan').addEventListener('click', () => {
+    let o = null;
+    try { o = JSON.parse(localStorage.getItem('fsw_last_scan') || 'null'); } catch (e) {}
+    if (!o || !Array.isArray(o.data) || !o.data.length) { updateLastScanBtn(); return; }
+    $('scrim').classList.add('show');
+    $('scan-modal').classList.add('show', 'expand');
+    $('scan-loading').style.display = 'none';
+    $('scan-results').classList.add('show');
+    loadKsuAppLabels(o.data).finally(() => renderScanResult(o.data));
+    const closeLast = () => {
+        $('scrim').classList.remove('show');
+        $('scan-modal').classList.remove('show', 'expand');
+    };
+    backPush(closeLast);
+});
+updateLastScanBtn();
+
+function cardHtml(it, kind) {
+    const isPartial = it.kernel !== '完整内核';
+    let badge = '';
+    if (kind === 'managed') {
+        badge = '<span class="kernel-badge mstate"></span>';
+    } else if (kind === 'configured') {
+        badge = '<span class="kernel-badge cfg"></span>';
+    } else {
+        badge = '<span class="kernel-badge ' + (isPartial ? 'partial' : '') + '"></span>';
+    }
+    const g = it.game ? '<span class="kernel-badge game"></span>' : '';
+    const ct = COMPAT[getCompat(it.pkg)];
+    const ctTag = ct ? '<span class="compat-tag ' + getCompat(it.pkg) + '"></span>' : '';
+    return '<div class="unmanaged-card" data-pkg="' + it.pkg + '" data-kernel="' + it.kernel +
+        '" data-dirs="' + it.dirs + '" data-mstat="' + it.mstat + '" data-bkmb="' + (it.bkmb || 0) + '">' +
+        '<div class="icon"><img src="ksu://icon/' + it.pkg + '" alt="" onerror="this.style.display=\'none\'"></div>' +
+        '<div class="info">' +
+        '<div class="name">' + appName(it.pkg) + badge + g + ctTag + '</div>' +
+        '<div class="pkg">' + it.pkg + '</div>' +
+        '</div>' +
+        '<svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>' +
+        '</div>';
+}
+
+function showDetail(pkg, kernel, dirsStr, mstat, bkmb) {
+    const detailPage = $('detail-page');
+    const dirs = dirsStr.split(/\s+/).filter(Boolean);
+    bkmb = parseInt(bkmb || '0', 10) || 0;
+
+    $('detail-name').textContent = appName(pkg);
+    $('detail-pkg').textContent = pkg;
+
+    const iconImg = document.querySelector('#detail-icon img');
+    iconImg.style.display = '';
+    iconImg.src = 'ksu://icon/' + pkg;
+
+    let kshort = '–';
+    if (mstat === '已生效') kshort = '管控中';
+    else if (mstat === '已配置') kshort = '已配置';
+    else kshort = kernel;
+    $('ds-kernel').textContent = kshort;
+    $('ds-dirs').textContent = dirs.length;
+    $('ds-bk').textContent = bkmb ? bkmb + ' MB' : '—';
+
+    let kbClass = 'partial';
+    if (mstat === '已生效') kbClass = 'mstate';
+    else if (mstat === '已配置') kbClass = 'cfg';
+    else if (kernel === '完整内核') kbClass = 'full';
+    else kbClass = 'partial';
+    $('detail-kbadge').className = 'detail-kbadge ' + kbClass;
+
+    let kdesc;
+    if (mstat === '已生效') {
+        kdesc = '管控中' + (bkmb ? ' · 已备份额外占用 ' + bkmb + ' MB（关闭管控时恢复原内核）' : '');
+    } else if (mstat === '已配置') {
+        kdesc = '已配置 · 开关已添加但内核仍在原位，点「应用配置」后移除';
+    } else if (kernel === '完整内核') {
+        kdesc = '完整内核 — 自带完整浏览器内核（通常 50MB+），移除可省大量空间';
+    } else {
+        kdesc = '组件残留 — 仅剩少量组件文件，移除收益较小';
+    }
+    $('detail-kernel').textContent = kdesc;
+
+    const ct = COMPAT[getCompat(pkg)];
+    $('detail-compat').className = 'compat-tag full ' + getCompat(pkg);
+    $('detail-compat').textContent = ct.label + ' · ' + ct.desc;
+
+    let filesHtml = '';
+    for (const d of dirs) {
+        const base = mstat === '已生效' ? '/data/adb/force_webview/backup/' : '/data/data/';
+        const fullPath = base + pkg + '/' + d;
+        filesHtml += '<div class="detail-file-item">' +
+            '<div class="detail-file-name">' + d + '</div>' +
+            '<div class="detail-file-path">' + fullPath + '</div>' +
+            '</div>';
+    }
+    $('detail-files').innerHTML = filesHtml;
+
+    const isAdded = !!config.apps[pkg];
+    const addBtn = $('detail-add');
+    const removeBtn = $('detail-remove');
+
+    if (isAdded) {
+        addBtn.disabled = true;
+        addBtn.textContent = '已添加';
+        removeBtn.disabled = false;
+        removeBtn.classList.add('enabled');
+    } else {
+        addBtn.disabled = false;
+        addBtn.textContent = '添加';
+        removeBtn.disabled = true;
+        removeBtn.classList.remove('enabled');
+    }
+
+    addBtn.onclick = async () => {
+        if (addBtn.disabled) return;
+        if (dirs.length === 0) {
+            toast('该应用无特征目录', true);
+            return;
+        }
+        addBtn.disabled = true;
+        await loadConfig();
+        config.apps[pkg] = { name: appName(pkg), enabled: false, dirs: dirs };
+        await saveConfig();
+        renderList();
+        toast('已添加「' + appName(pkg) + '」，可在应用页开启');
+        addBtn.disabled = true;
+        addBtn.textContent = '已添加';
+        removeBtn.disabled = false;
+        removeBtn.classList.add('enabled');
+    };
+
+    removeBtn.onclick = async () => {
+        if (removeBtn.disabled) return;
+        if (!config.apps[pkg]) {
+            toast('应用未添加', true);
+            return;
+        }
+        removeBtn.disabled = true;
+        await loadConfig();
+        delete config.apps[pkg];
+        await saveConfig();
+        renderList();
+        toast('已移除「' + appName(pkg) + '」');
+        addBtn.disabled = false;
+        addBtn.textContent = '添加';
+        removeBtn.disabled = true;
+        removeBtn.classList.remove('enabled');
+    };
+
+    detailPage.classList.add('show');
+    const closeDetail = () => detailPage.classList.remove('show');
+    backPush(closeDetail);
+}
+
+$('detail-back').addEventListener('click', () => {
+    const i = backStack.findIndex(f => f.toString().includes('detailPage'));
+    if (i >= 0) backStack.splice(i, 1)[0]();
+    else $('detail-page').classList.remove('show');
+});
+
+let legendTimer = null;
+function clearLegendTimer() {
+    if (legendTimer) { clearInterval(legendTimer); legendTimer = null; }
+}
+function showLegendForced() {
+    const sheet = $('legend-sheet');
+    sheet.classList.add('show');
+    const closeLegend = () => { sheet.classList.remove('show'); resetLegendClose(); };
+    backPush(closeLegend);
+    const ok = $('legend-ok'), close = $('legend-close');
+    const actions = document.querySelector('.legend-actions');
+    close.style.display = 'none';
+    actions.style.display = '';
+    ok.disabled = true;
+    let n = 5;
+    ok.textContent = `我已阅读 (${n})`;
+    clearLegendTimer();
+    legendTimer = setInterval(() => {
+        n--;
+        ok.textContent = `我已阅读 (${n})`;
+        if (n <= 0) {
+            clearLegendTimer();
+            ok.disabled = false;
+            ok.textContent = '我已阅读';
+        }
+    }, 1000);
+    ok.onclick = () => {
+        onboarding.scanLegend = true; saveOnboarding();
+        const i = backStack.findIndex(f => f.toString().includes('resetLegendClose'));
+        if (i >= 0) backStack.splice(i, 1);
+        clearLegendTimer();
+        sheet.classList.remove('show');
+        resetLegendClose();
+        $('b-scan').click();
+    };
+}
+function resetLegendClose() {
+    clearLegendTimer();
+    $('legend-close').style.display = '';
+    document.querySelector('.legend-actions').style.display = 'none';
+    const ok = $('legend-ok');
+    ok.disabled = true;
+    ok.onclick = null;
+    const t = ok.textContent.match(/\((\d+)\)/);
+    if (t) ok.textContent = '我已阅读';
+}
+$('legend-btn').addEventListener('click', () => {
+    $('legend-sheet').classList.add('show');
+    const actions = document.querySelector('.legend-actions');
+    const ok = $('legend-ok');
+    actions.style.display = 'flex';
+    ok.disabled = false;
+    ok.textContent = '关闭';
+    ok.onclick = () => {
+        const i = backStack.findIndex(f => f.toString().includes("legend-sheet"));
+        if (i >= 0) backStack.splice(i, 1);
+        $('legend-sheet').classList.remove('show');
+    };
+    backPush(() => {
+        $('legend-sheet').classList.remove('show');
+        actions.style.display = 'none';
+    });
+});
+$('legend-close').addEventListener('click', () => {
+    if (legendTimer) return;
+    $('legend-sheet').classList.remove('show');
+    document.querySelector('.legend-actions').style.display = 'none';
+    $('legend-ok').textContent = '我已阅读';
+});
+$('legend-sheet').addEventListener('click', (e) => {
+    if (e.target === $('legend-sheet')) {
+        if (legendTimer) return;
+        $('legend-sheet').classList.remove('show');
+        $('legend-close').style.display = '';
+        document.querySelector('.legend-actions').style.display = 'none';
+        $('legend-ok').textContent = '我已阅读';
+    }
+});
+
+$('scrim').addEventListener('click', (e) => {
+    if (e.target === $('scrim')) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        const i = backStack.findIndex(f => f.name === 'closeScan' || f.toString().includes('scan-modal'));
+        if (i >= 0) backStack.splice(i, 1)[0]();
+        else {
+            $('scrim').classList.remove('show');
+            $('scan-modal').classList.remove('show', 'expand');
+            setTimeout(() => {
+                $('scan-loading').style.display = 'flex';
+                $('scan-results').classList.remove('show');
+            }, 300);
+        }
+    }
+});
+
+/* 关于 / 日志 */
+$('b-info').addEventListener('click', () => openSheet('sh-about'));
+$('b-ignored').addEventListener('click', () => { topMenu.classList.remove('open'); openIgnored(); });
+$('card-bk').addEventListener('click', openBkManager);
+
+async function openIgnored() {
+    const list = $('ig-list');
+    list.innerHTML = '<div class="loadbox spin">读取中…</div>';
+    openSheet('sh-ignored');
+    try {
+        await loadConfig();
+        const arr = config.ignored || [];
+        if (!arr.length) {
+            list.innerHTML = '<div class="bk-hint">暂无已忽略的应用。</div>';
+            return;
+        }
+        const cacheMap = {};
+        try {
+            const o = JSON.parse(localStorage.getItem('fsw_last_scan') || 'null');
+            (o && Array.isArray(o.data) ? o.data : []).forEach(x => { cacheMap[x.pkg] = x; });
+        } catch (e) {}
+        list.innerHTML = arr.map(pkg => {
+            const it = cacheMap[pkg];
+            const dirs = it ? (it.dirs || '') : '';
+            return '<div class="bk-item" data-pkg="' + pkg + '">' +
+                '<div class="bk-tx"><div class="bk-nm">' + appName(pkg) + '</div>' +
+                '<div class="bk-sz">' + pkg + (dirs ? ' · ' + dirs : '') + '</div></div>' +
+                '<button class="bk-btn ig">恢复</button></div>';
+        }).join('');
+        list.querySelectorAll('.bk-item').forEach(item => {
+            item.querySelector('.ig').onclick = async () => {
+                try {
+                    await loadConfig();
+                    config.ignored = (config.ignored || []).filter(p => p !== item.dataset.pkg);
+                    await saveConfig();
+                    item.remove();
+                    if (!config.ignored.length) list.innerHTML = '<div class="bk-hint">暂无已忽略的应用。</div>';
+                    toast('已恢复，下次分析会重新提示');
+                } catch (e) { toast('恢复失败：' + e.message, true); }
+            };
+        });
+    } catch (e) {
+        list.innerHTML = '<div class="bk-hint">读取失败：' + e.message + '</div>';
+    }
+}
+
+async function openBkManager() {
+    const list = $('bk-list');
+    list.innerHTML = '<div class="loadbox spin">读取中…</div>';
+    openSheet('sh-bk');
+    let out = '';
+    try {
+        // exec 多行输出会截断，写文件再 fetch
+        await exec('sh ' + MDIR + '/list_backups.sh');
+        await new Promise(r => setTimeout(r, 150));
+        const fr = await fetch('bk-list.txt?' + Date.now(), { cache: 'no-store' });
+        const text = fr.ok ? await fr.text() : '';
+        const lines = text.trim().split('\n').filter(Boolean);
+        if (!lines.length) {
+            list.innerHTML = '<div class="bk-hint">暂无可还原的内核备份。启用应用管控并保存后，原内核会自动备份到这里。</div>';
+            return;
+        }
+        for (const ln of lines) {
+            const [pkg, mb] = ln.split('|');
+            out += '<div class="bk-item" data-pkg="' + pkg + '">' +
+                '<div class="bk-tx"><div class="bk-nm">' + appName(pkg) + '</div>' +
+                '<div class="bk-sz">' + mb + ' MB</div></div>' +
+                '<button class="bk-btn del">删除</button></div>';
+        }
+        list.innerHTML = out;
+        list.querySelectorAll('.bk-item').forEach(item => {
+            const pkg = item.dataset.pkg;
+            const refreshMain = async () => {
+                try {
+                    await exec('sh ' + MDIR + '/status.sh');
+                    await loadStatus();
+                    renderList(); renderOverview();
+                } catch (e) {}
+            };
+            item.querySelector('.del').onclick = async () => {
+                const st = (status && status.apps) || {};
+                const activeNow = st[pkg] === true;
+                const msg = activeNow
+                    ? appName(pkg) + ' 正在管控中。删除备份会使原网页内核无法自动还原，确定继续？'
+                    : '永久删除「' + appName(pkg) + '」的原内核备份？';
+                if (!window.confirm(msg)) return;
+                await exec('rm -rf ' + DATA + '/backup/' + pkg);
+                await loadConfig();
+                if (config.apps[pkg]) { delete config.apps[pkg]; await saveConfig(); }
+                item.remove();
+                await refreshMain();
+                toast('已永久删除备份');
+            };
+        });
+    } catch (e) {
+        list.innerHTML = '<div class="bk-hint">读取失败：' + e.message + '</div>';
+    }
+}
+$('b-gh').addEventListener('click', () => {
+    exec('am start -a android.intent.action.VIEW -d https://github.com/zoulin3/force_system_webview')
+        .catch(() => toast('打开失败', true));
+});
+$('b-cl').addEventListener('click', async () => {
+    try {
+        const r = await fetch('CHANGELOG.txt?' + Date.now());
+        showText('更新日志', r.ok ? await r.text() : '暂无内容');
+    } catch (e) { showText('更新日志', '读取失败'); }
+});
+
+$('b-log').addEventListener('click', async () => {
+    try {
+        await exec('tail -80 ' + DATA + '/service.log > ' + MDIR + '/webroot/log.txt && chmod 644 ' + MDIR + '/webroot/log.txt');
+        const r = await fetch('log.txt?' + Date.now());
+        showText('日志（最近 80 行）', r.ok ? (await r.text()) || '（空）' : '暂无日志');
+    } catch (e) { showText('日志', '读取失败：' + e.message); }
+});
+$('b-reboot').addEventListener('click', () => {
+    if (window.confirm('确定要重启设备吗？')) exec('/system/bin/reboot');
+});
+
+/* 免责声明 */
+function closeDisclaimer() {
+    const wrap = $('disc-wrap');
+    wrap.classList.remove('vis');
+    document.body.classList.remove('sheet-open');
+    setTimeout(() => wrap.classList.remove('open'), 340);
+    const i = backStack.findIndex(f => f === closeDisclaimer);
+    if (i >= 0) backStack.splice(i, 1);
+}
+function showDisclaimer() {
+    const wrap = $('disc-wrap');
+    const once = $('disc-once');
+    const forever = $('disc-forever');
+    backPush(closeDisclaimer);
+    wrap.classList.add('open');
+    requestAnimationFrame(() => requestAnimationFrame(() => wrap.classList.add('vis')));
+    document.body.classList.add('sheet-open');
+    let n = 5;
+    once.textContent = `本次关闭 (${n})`;
+    forever.textContent = `已阅，不再提示 (${n})`;
+    const timer = setInterval(() => {
+        n--;
+        once.textContent = `本次关闭 (${n})`;
+        forever.textContent = `已阅，不再提示 (${n})`;
+        if (n <= 0) {
+            clearInterval(timer);
+            once.disabled = false;
+            forever.disabled = false;
+            once.textContent = '本次关闭';
+            forever.textContent = '已阅，不再提示';
+        }
+    }, 1000);
+    once.onclick = closeDisclaimer;
+    forever.onclick = () => {
+        onboarding.disclaimer = true; saveOnboarding();
+        closeDisclaimer();
+    };
+}
+const CUR_VC = 46;
+onboardingReady.then(() => { if (!onboarding.disclaimer) showDisclaimer(); });
+
+(async function init() {
+    try {
+        await loadConfig();
+        try { await exec('sh ' + MDIR + '/status.sh'); } catch (e) {}
+        await loadStatus();
+        renderList(); renderOverview();
+    } catch (e) {
+        toast('初始化失败：' + e.message, true, 5000);
+        $('list').innerHTML = `<div class="loadbox">${e.message}</div>`;
+    }
+})();
+</script>
+
+</body>
+</html>
+
+
