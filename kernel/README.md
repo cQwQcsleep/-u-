@@ -27,7 +27,8 @@ Redmi Note 12T（ruby，MT6877 / 天玑 810）内核折腾记录与产物。
 |---|---|---|
 | `builds/MoonWake-2.6.0-KernelSU-AOSP-20261002.zip` | MoonWake + KernelSU-Next（AOSP 形态，带 dtb） | 类原生 ROM |
 | `builds/MoonWake-2.6.0-KernelSU-HyperOS-20261002.zip` | MoonWake + KernelSU-Next（HyperOS 形态，不带 dtb） | MIUI / HyperOS |
-| `builds/MoonWake-2.6.0-KernelSU-Official-v0.9.5-20261003.zip` | **MoonWake + 官方 KernelSU v0.9.5** | 类原生 ROM |
+| `builds/MoonWake-2.6.0-KernelSU-Official-v0.9.5-20261003.zip` | **MoonWake + 官方 KernelSU v0.9.5**（AOSP 形态，带 dtb） | 类原生 ROM |
+| `builds/MoonWake-2.6.0-KernelSU-Official-v0.9.5-HyperOS-20261003.zip` | **MoonWake + 官方 KernelSU v0.9.5**（HyperOS 形态，不带 dtb，合并 `vendor/hyperos.config`） | MIUI / HyperOS |
 | `builds/HyperMoon-1.0.2-MoonWake-Features-20261003.zip` | **HyperMoon + MGLRU/BBR/LZ4KD/NOOP** | MIUI / HyperOS |
 
 ## 两个内核的关系

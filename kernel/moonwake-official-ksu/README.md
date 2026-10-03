@@ -80,8 +80,12 @@ make O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 \
 
 - [x] 集成补丁 + 配置片段
 - [x] 修复链接错误（KPROBES=n）
-- [x] 编译通过 → 产物 `builds/MoonWake-2.6.0-KernelSU-Official-v0.9.5-20261003.zip`
+- [x] 编译通过（AOSP 形态）→ 产物 `builds/MoonWake-2.6.0-KernelSU-Official-v0.9.5-20261003.zip`
+- [x] 编译通过（HyperOS 形态）→ 产物 `builds/MoonWake-2.6.0-KernelSU-Official-v0.9.5-HyperOS-20261003.zip`
 - [ ] 真机验证（刷入后装官方 KernelSU Manager）
+
+HyperOS 形态 = 在上述配置基础上再合并 `vendor/hyperos.config`（恢复 MTK 性能/遥测/调试设施），
+并改用不带 dtb 的 `Image.gz` 打包（与 HyperOS 刷机惯例一致）。
 
 ## 编译验证结果
 
