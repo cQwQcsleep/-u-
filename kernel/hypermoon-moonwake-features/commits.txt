@@ -1,0 +1,52 @@
+e37468e196d1 configs: add MoonWake feature fragments (BBR/MGLRU/LZ4KD/NOOP/SLMK)
+88e8fa52a0de ANDROID: Make MGLRU aware of speculative faults
+465f772b64fd BACKPORT: mm: multi-gen LRU: Move lru_gen_add_mm() out of IRQ-off region
+2b711208a207 mm: mglru: Fix some missing function declarations and pointer errors
+e84cb0d53470 FROMLIST: mm: multi-gen LRU: debugfs interface
+627bffcf680c FROMLIST: mm: multi-gen LRU: thrashing prevention
+30a35585674f FROMLIST: mm: multi-gen LRU: kill switch
+87c1fd87dcdd FROMLIST: mm: multi-gen LRU: optimize multiple memcgs
+da5c91547375 FROMLIST: mm: multi-gen LRU: support page table walks
+fd8102ea0f0f FROMLIST: mm: multi-gen LRU: exploit locality in rmap
+6565ac696beb FROMLIST: mm: multi-gen LRU: minimal implementation
+2f616e871a4c FROMLIST: mm: multi-gen LRU: groundwork
+2155bdde50e6 simple_lmk: Reap anonymous memory from victims
+bce900a50015 simple_lmk: Reduce unnecessary wake ups
+abd66adc612c simple_lmk: Ratelimit the 'no processes available to kill' message
+e2b9fc870558 simple_lmk: Fix victim scheduling priority elevation
+ef9d49793884 simple_lmk: Thaw victims upon killing them
+83f1bf3c0830 simple_lmk: Make the reclaim thread freezable
+3da4b31aa113 simple_lmk: Be extra paranoid if tasks can have no pages
+6da5c3e00ebc simple_lmk: Update do_send_sig_info() group argument for 4.18+
+9e581f4a353b simple_lmk: Optimize victim finder to eliminate hard-coded adj ranges
+e227a1ce6b6e simple_lmk: Cacheline-align the victims array and mm_free_lock on SMP
+29d82e3526da simple_lmk: Pass a custom swap function to sort()
+b4db216cd620 simple_lmk: Skip victim reduction when all victims need to be killed
+67187580aa9f simple_lmk: Use MIN_FREE_PAGES wherever pages_needed is used
+994f73eaea6d simple_lmk: Don't block in simple_lmk_mm_freed() on mm_free_lock
+5e81e3c2ec95 simple_lmk: Print a message when the timeout is reached
+62a9fada31f1 simple_lmk: Remove unnecessary clean-up when timeout is reached
+0ccf303a8edb simple_lmk: Hold an RCU read lock instead of the tasklist read lock
+92ae67c5942b simple_lmk: Consider all positive adjs when finding victims
+e3fe319e08ee simple_lmk: Update adj targeting for Android 10
+bf39fa90f1a5 simple_lmk: Use vmpressure notifier to trigger kills
+9f5891861f76 mm: vmpressure: allow in-kernel clients to subscribe for events
+6e8ecbfdc1d3 simple_lmk: Include swap memory usage in the size of victims
+74e532a58149 simple_lmk: Relax memory barriers and clean up some styling
+face2ef9991d simple_lmk: Place victims onto SCHED_RR
+106c053839e7 simple_lmk: Add a timeout to stop waiting for victims to die
+39ea1b777322 simple_lmk: Ignore tasks that won't free memory
+cfdd61b95dac simple_lmk: Simplify tricks used to speed up the death process
+74389902d6d2 simple_lmk: Mark victim thread group with TIF_MEMDIE
+1890bc5e9040 simple_lmk: Print a message when there are no processes to kill
+518310478ae2 simple_lmk: Remove compat cruft not specific to 4.14
+1cfc29c96508 simple_lmk: Update copyright to 2020
+d304924b2253 simple_lmk: Don't queue up new reclaim requests during reclaim
+74820f7018a8 simple_lmk: Clean up some code style nitpicks
+dd271b96d950 simple_lmk: Make reclaim deterministic
+ca22d337b5e3 simple_lmk: Fix broken multicopy atomicity for victims_to_kill
+377e7c33e6e5 simple_lmk: Use proper atomic_* operations where needed
+62fcac58a6a6 simple_lmk: Remove kthread_should_stop() exit condition
+0c9d472f4d80 simple_lmk: Fix pages_found calculation
+cbdf5fadc24d simple_lmk: Introduce Simple Low Memory Killer for Android
+140d7fe4b5ed BACKPORT: crypto: add lz4kd library
