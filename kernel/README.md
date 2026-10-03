@@ -10,12 +10,16 @@ Redmi Note 12T（ruby，MT6877 / 天玑 810）内核折腾记录与产物。
 | [`moonwake-official-ksu/`](moonwake-official-ksu/) | **方案一**：MoonWake 内核内置**官方 KernelSU v0.9.5**（非 GKI 手动集成）✅ 编译通过 |
 | [`hypermoon-moonwake-features/`](hypermoon-moonwake-features/) | **方案二**：把 MoonWake 的特性（MGLRU / BBR / LZ4KD / NOOP）移植到 HyperMoon ✅ 编译通过 |
 | [`hyperos-compat/`](hyperos-compat/) | MoonWake 的 HyperOS/MIUI 兼容配置片段（恢复 MTK 性能/遥测/调试设施） |
-| [`kernel-action/`](kernel-action/) | KernelAction CI 构建配置（AOSP / HyperOS 两个变体） |
+| [`kernel-action/`](kernel-action/) | KernelAction CI 构建配置（含两个新变体的 JSON） |
 | [`builds/`](builds/) | 可直接刷入的 AnyKernel3 卡刷包 |
 | [`docs/`](docs/) | 完整构建说明文档 |
 
-另有完整源码分支：`kernel-source/moonwake-official-ksu`
-（MoonWake 全量源码 + 官方 KernelSU v0.9.5，与本仓库其它内容历史无关，约 443 MB）。
+另有完整源码分支（可直接用 KernelAction CI 构建，无需再打补丁）：
+
+- `kernel-source/moonwake-official-ksu`：MoonWake 全量源码 + 官方 KernelSU v0.9.5（约 443 MB）
+- `kernel-source/hypermoon-moonwake-features`：HyperMoon 全量源码 + MGLRU/BBR/LZ4KD/NOOP 移植（约 433 MB）
+
+这两个分支与本仓库其它内容历史无关（独立快照）；单独 clone 时建议 `git clone --single-branch --branch <分支名>`。
 
 ## 卡刷包一览
 
