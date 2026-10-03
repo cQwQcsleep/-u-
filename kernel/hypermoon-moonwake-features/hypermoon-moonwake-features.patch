@@ -1029,6 +1029,19 @@ index 6b205d784d1e..c47cec698e71 100644
  		printk(KERN_WARNING "fuse: trying to steal weird page\n");
  		printk(KERN_WARNING "  page=%p index=%li flags=%08lx, count=%i, mapcount=%i, mapping=%p\n", page, page->index, page->flags, page_count(page), page_mapcount(page), page->mapping);
  		return 1;
+diff --git a/fs/proc/task_mmu.c b/fs/proc/task_mmu.c
+index fae52b0027dd..90849c62582b 100644
+--- a/fs/proc/task_mmu.c
++++ b/fs/proc/task_mmu.c
+@@ -1764,7 +1764,7 @@ static ssize_t pagemap_read(struct file *file, char __user *buf,
+ 				pm.buffer->pme = 0;
+ 		}
+ #endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
+-		mmap_read_unlock(mm);
++		up_read(&mm->mmap_sem);
+ 		start_vaddr = end;
+ 
+ 		len = min(count, PM_ENTRY_BYTES * pm.pos);
 diff --git a/include/linux/cgroup.h b/include/linux/cgroup.h
 index fb0336264a21..27a685caf308 100644
 --- a/include/linux/cgroup.h
@@ -1885,7 +1898,7 @@ index c8781eea292d..881eeec59764 100644
  			 unsigned long next, struct mm_walk *walk);
  	int (*pmd_entry)(pmd_t *pmd, unsigned long addr,
 diff --git a/include/linux/mm_inline.h b/include/linux/mm_inline.h
-index 10191c28fc04..0e9725916a21 100644
+index 10191c28fc04..06b0e628a1e1 100644
 --- a/include/linux/mm_inline.h
 +++ b/include/linux/mm_inline.h
 @@ -29,6 +29,8 @@ static __always_inline void __update_lru_size(struct lruvec *lruvec,
@@ -1924,7 +1937,7 @@ index 10191c28fc04..0e9725916a21 100644
  
  /**
   * page_lru_base_type - which LRU list type should a page be on?
-@@ -127,4 +109,233 @@ static __always_inline enum lru_list page_lru(struct page *page)
+@@ -127,4 +109,228 @@ static __always_inline enum lru_list page_lru(struct page *page)
  
  #define lru_to_page(head) (list_entry((head)->prev, struct page, lru))
  
@@ -2124,10 +2137,8 @@ index 10191c28fc04..0e9725916a21 100644
 +#endif /* CONFIG_LRU_GEN */
 +
 +static __always_inline void add_page_to_lru_list(struct page *page,
-+				struct lruvec *lruvec)
++				struct lruvec *lruvec, enum lru_list lru)
 +{
-+	enum lru_list lru = page_lru(page);
-+
 +	if (lru_gen_add_page(lruvec, page, false))
 +		return;
 +
@@ -2136,10 +2147,8 @@ index 10191c28fc04..0e9725916a21 100644
 +}
 +
 +static __always_inline void add_page_to_lru_list_tail(struct page *page,
-+				struct lruvec *lruvec)
++				struct lruvec *lruvec, enum lru_list lru)
 +{
-+	enum lru_list lru = page_lru(page);
-+
 +	if (lru_gen_add_page(lruvec, page, true))
 +		return;
 +
@@ -2148,14 +2157,13 @@ index 10191c28fc04..0e9725916a21 100644
 +}
 +
 +static __always_inline void del_page_from_lru_list(struct page *page,
-+				struct lruvec *lruvec)
++				struct lruvec *lruvec, enum lru_list lru)
 +{
 +	if (lru_gen_del_page(lruvec, page, false))
 +		return;
 +
 +	list_del(&page->lru);
-+	update_lru_size(lruvec, page_lru(page), page_zonenum(page),
-+			-hpage_nr_pages(page));
++	update_lru_size(lruvec, lru, page_zonenum(page), -hpage_nr_pages(page));
 +}
  #endif
 diff --git a/include/linux/mm_types.h b/include/linux/mm_types.h
@@ -2270,13 +2278,28 @@ index fab389a48afb..d61724323040 100644
  extern void tlb_gather_mmu(struct mmu_gather *tlb, struct mm_struct *mm,
  				unsigned long start, unsigned long end);
 diff --git a/include/linux/mmzone.h b/include/linux/mmzone.h
-index 6acc3b630334..d9d594d84590 100644
+index 6acc3b630334..e5dd967bef72 100644
 --- a/include/linux/mmzone.h
 +++ b/include/linux/mmzone.h
-@@ -244,6 +244,218 @@ struct zone_reclaim_stat {
- 	unsigned long		recent_scanned[2];
- };
+@@ -231,6 +231,8 @@ static inline int is_active_lru(enum lru_list lru)
+ 	return (lru == LRU_ACTIVE_ANON || lru == LRU_ACTIVE_FILE);
+ }
  
++#define ANON_AND_FILE 2
++
+ struct zone_reclaim_stat {
+ 	/*
+ 	 * The pageout code in vmscan.c keeps track of how many of the
+@@ -240,10 +242,222 @@ struct zone_reclaim_stat {
+ 	 *
+ 	 * The anon LRU stats live in [0], file LRU stats in [1]
+ 	 */
+-	unsigned long		recent_rotated[2];
+-	unsigned long		recent_scanned[2];
++	unsigned long		recent_rotated[ANON_AND_FILE];
++	unsigned long		recent_scanned[ANON_AND_FILE];
++};
++
 +#endif /* !__GENERATING_BOUNDS_H */
 +
 +/*
@@ -2446,8 +2469,8 @@ index 6acc3b630334..d9d594d84590 100644
 +	int batched;
 +	bool can_swap;
 +	bool full_scan;
-+};
-+
+ };
+ 
 +void lru_gen_init_lruvec(struct lruvec *lruvec);
 +void *lru_gen_eviction(struct page *page);
 +void lru_gen_refault(struct page *page, void *shadow);
@@ -2492,7 +2515,7 @@ index 6acc3b630334..d9d594d84590 100644
  struct lruvec {
  	struct list_head		lists[NR_LRU_LISTS];
  	struct zone_reclaim_stat	reclaim_stat;
-@@ -251,6 +463,12 @@ struct lruvec {
+@@ -251,6 +465,12 @@ struct lruvec {
  	atomic_long_t			inactive_age;
  	/* Refaults at the time of last reclaim cycle */
  	unsigned long			refaults;
@@ -2505,7 +2528,7 @@ index 6acc3b630334..d9d594d84590 100644
  #ifdef CONFIG_MEMCG
  	struct pglist_data *pgdat;
  #endif
-@@ -728,6 +946,11 @@ typedef struct pglist_data {
+@@ -728,6 +948,11 @@ typedef struct pglist_data {
  
  	unsigned long		flags;
  
@@ -2635,7 +2658,7 @@ index 000000000000..b02d1bec9731
 +
 +#endif /* _SIMPLE_LMK_H_ */
 diff --git a/include/linux/swap.h b/include/linux/swap.h
-index 55dcc236f522..c55e70a45787 100644
+index 55dcc236f522..2e383e64d949 100644
 --- a/include/linux/swap.h
 +++ b/include/linux/swap.h
 @@ -128,6 +128,10 @@ union swap_header {
@@ -2649,23 +2672,35 @@ index 55dcc236f522..c55e70a45787 100644
  };
  
  #ifdef __KERNEL__
-@@ -338,6 +342,16 @@ extern void lru_cache_add_anon(struct page *page);
+@@ -338,6 +342,7 @@ extern void lru_cache_add_anon(struct page *page);
  extern void lru_cache_add_file(struct page *page);
  extern void lru_add_page_tail(struct page *page, struct page *page_tail,
  			 struct lruvec *lruvec, struct list_head *head);
 +
-+extern void __lru_cache_add_active_or_unevictable(struct page *page,
-+                                        unsigned long vma_flags);
-+
-+static inline void lru_cache_add_active_or_unevictable(struct page *page,
-+				struct vm_area_struct *vma)
-+{
-+	return __lru_cache_add_active_or_unevictable(page, vma->vm_flags);
-+}
-+
  extern void activate_page(struct page *);
  extern void mark_page_accessed(struct page *);
  extern void lru_add_drain(void);
+@@ -412,8 +417,9 @@ extern unsigned long total_swapcache_pages(void);
+ extern void show_swap_cache_info(void);
+ extern int add_to_swap(struct page *page);
+ extern int add_to_swap_cache(struct page *, swp_entry_t, gfp_t);
+-extern int __add_to_swap_cache(struct page *page, swp_entry_t entry);
+-extern void __delete_from_swap_cache(struct page *);
++extern int __add_to_swap_cache(struct page *page, swp_entry_t entry, void **shadowp);
++extern void __delete_from_swap_cache(struct page *, void *shadow);
++extern void clear_shadow_from_swap_cache(int type, unsigned long begin, unsigned long end);
+ extern void delete_from_swap_cache(struct page *);
+ extern void free_page_and_swap_cache(struct page *);
+ extern void free_pages_and_swap_cache(struct page **, int);
+@@ -567,7 +573,7 @@ static inline int add_to_swap_cache(struct page *page, swp_entry_t entry,
+ 	return -1;
+ }
+ 
+-static inline void __delete_from_swap_cache(struct page *page)
++static inline void __delete_from_swap_cache(struct page *page, void *shadow)
+ {
+ }
+ 
 diff --git a/include/linux/vmpressure.h b/include/linux/vmpressure.h
 index 61e6fddfb26f..1b8a21c3757a 100644
 --- a/include/linux/vmpressure.h
@@ -5908,6 +5943,30 @@ index 15398bc7c930..80b29b4f0ad4 100644
  
  	/* ->mapping in first tail page is compound_mapcount */
  	VM_BUG_ON_PAGE(tail > 2 && page_tail->mapping != TAIL_MAPPING,
+diff --git a/mm/internal.h b/mm/internal.h
+index 06cb468d540b..bd995deb8567 100644
+--- a/mm/internal.h
++++ b/mm/internal.h
+@@ -584,4 +584,18 @@ static inline bool is_migrate_highatomic_page(struct page *page)
+ 
+ void setup_zone_pageset(struct zone *zone);
+ extern struct page *alloc_new_node_page(struct page *page, unsigned long node);
+-#endif	/* __MM_INTERNAL_H */
++
++#ifndef arch_has_hw_pte_young
++/*
++ * Return whether the accessed bit is supported on the local CPU.
++ *
++ * This stub assumes accessing through an old PTE triggers a page fault.
++ * Architectures that automatically set the access bit should overwrite it.
++ */
++static inline bool arch_has_hw_pte_young(void)
++{
++	return false;
++}
++#endif
++
++#endif  /* __MM_INTERNAL_H */
 diff --git a/mm/memcontrol.c b/mm/memcontrol.c
 index 9a9db8a463a5..e3d37f85d105 100644
 --- a/mm/memcontrol.c
@@ -6519,7 +6578,7 @@ index ce13e428380e..17eb18749b0d 100644
  	if (!pagevec_add(pvec, page) || PageCompound(page))
  		__pagevec_lru_add(pvec);
 diff --git a/mm/swap_state.c b/mm/swap_state.c
-index b99e8fd93cd3..16e27da479b8 100644
+index b99e8fd93cd3..b7c1d7e3f139 100644
 --- a/mm/swap_state.c
 +++ b/mm/swap_state.c
 @@ -8,6 +8,7 @@
@@ -6530,7 +6589,142 @@ index b99e8fd93cd3..16e27da479b8 100644
  #include <linux/gfp.h>
  #include <linux/kernel_stat.h>
  #include <linux/swap.h>
-@@ -382,6 +383,8 @@ struct page *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
+@@ -111,7 +112,7 @@ void show_swap_cache_info(void)
+  * __add_to_swap_cache resembles add_to_page_cache_locked on swapper_space,
+  * but sets SwapCache flag and private instead of mapping and index.
+  */
+-int __add_to_swap_cache(struct page *page, swp_entry_t entry)
++int __add_to_swap_cache(struct page *page, swp_entry_t entry, void **shadowp)
+ {
+ 	int error, i, nr = hpage_nr_pages(page);
+ 	struct address_space *address_space;
+@@ -127,11 +128,30 @@ int __add_to_swap_cache(struct page *page, swp_entry_t entry)
+ 	address_space = swap_address_space(entry);
+ 	xa_lock_irq(&address_space->i_pages);
+ 	for (i = 0; i < nr; i++) {
++		void *item;
++		void __rcu **slot;
++		struct radix_tree_node *node;
++
+ 		set_page_private(page + i, entry.val + i);
+-		error = radix_tree_insert(&address_space->i_pages,
+-					  idx + i, page + i);
++		error = __radix_tree_create(&address_space->i_pages,
++					    idx + i, 0, &node, &slot);
+ 		if (unlikely(error))
+ 			break;
++
++		item = radix_tree_deref_slot_protected(slot,
++				&address_space->i_pages.xa_lock);
++		if (WARN_ON_ONCE(item && !radix_tree_exceptional_entry(item))) {
++			error = -EEXIST;
++			break;
++		}
++
++		__radix_tree_replace(&address_space->i_pages, node, slot,
++				     page + i, NULL);
++
++		if (shadowp) {
++			VM_BUG_ON(i);
++			*shadowp = item;
++		}
+ 	}
+ 	if (likely(!error)) {
+ 		address_space->nrpages += nr;
+@@ -164,7 +184,7 @@ int add_to_swap_cache(struct page *page, swp_entry_t entry, gfp_t gfp_mask)
+ 
+ 	error = radix_tree_maybe_preload_order(gfp_mask, compound_order(page));
+ 	if (!error) {
+-		error = __add_to_swap_cache(page, entry);
++		error = __add_to_swap_cache(page, entry, NULL);
+ 		radix_tree_preload_end();
+ 	}
+ 	return error;
+@@ -174,7 +194,7 @@ int add_to_swap_cache(struct page *page, swp_entry_t entry, gfp_t gfp_mask)
+  * This must be called only on pages that have
+  * been verified to be in the swap cache.
+  */
+-void __delete_from_swap_cache(struct page *page)
++void __delete_from_swap_cache(struct page *page, void *shadow)
+ {
+ 	struct address_space *address_space;
+ 	int i, nr = hpage_nr_pages(page);
+@@ -184,12 +204,23 @@ void __delete_from_swap_cache(struct page *page)
+ 	VM_BUG_ON_PAGE(!PageLocked(page), page);
+ 	VM_BUG_ON_PAGE(!PageSwapCache(page), page);
+ 	VM_BUG_ON_PAGE(PageWriteback(page), page);
++	VM_BUG_ON(shadow && !radix_tree_exceptional_entry(shadow));
+ 
+ 	entry.val = page_private(page);
+ 	address_space = swap_address_space(entry);
+ 	idx = swp_offset(entry);
+ 	for (i = 0; i < nr; i++) {
+-		radix_tree_delete(&address_space->i_pages, idx + i);
++		void *item;
++		void __rcu **slot;
++		struct radix_tree_node *node;
++
++		item = __radix_tree_lookup(&address_space->i_pages,
++					   idx + i, &node, &slot);
++		if (WARN_ON_ONCE(item != page + i))
++			continue;
++
++		__radix_tree_replace(&address_space->i_pages,
++				     node, slot, shadow, NULL);
+ 		set_page_private(page + i, 0);
+ 	}
+ 	ClearPageSwapCache(page);
+@@ -198,6 +229,40 @@ void __delete_from_swap_cache(struct page *page)
+ 	ADD_CACHE_INFO(del_total, nr);
+ }
+ 
++void clear_shadow_from_swap_cache(int type, unsigned long begin,
++				unsigned long end)
++{
++	unsigned long curr = begin;
++
++	for (;;) {
++		void *item;
++		void __rcu **slot;
++		struct radix_tree_iter iter;
++		swp_entry_t entry = swp_entry(type, curr);
++		struct address_space *address_space = swap_address_space(entry);
++
++		xa_lock_irq(&address_space->i_pages);
++		radix_tree_for_each_slot(slot, &address_space->i_pages,
++					 &iter, curr) {
++			item = radix_tree_deref_slot_protected(slot,
++					&address_space->i_pages.xa_lock);
++			if (radix_tree_exceptional_entry(item))
++				radix_tree_iter_delete(&address_space->i_pages,
++						       &iter, slot);
++			if (iter.next_index > end)
++				break;
++		}
++		xa_unlock_irq(&address_space->i_pages);
++
++		/* search the next swapcache until we meet end */
++		curr >>= SWAP_ADDRESS_SPACE_SHIFT;
++		curr++;
++		curr <<= SWAP_ADDRESS_SPACE_SHIFT;
++		if (curr > end)
++			break;
++	}
++}
++
+ /**
+  * add_to_swap - allocate swap space for a page
+  * @page: page we want to move to swap
+@@ -271,7 +336,7 @@ void delete_from_swap_cache(struct page *page)
+ 
+ 	address_space = swap_address_space(entry);
+ 	xa_lock_irq(&address_space->i_pages);
+-	__delete_from_swap_cache(page);
++	__delete_from_swap_cache(page, NULL);
+ 	xa_unlock_irq(&address_space->i_pages);
+ 
+ 	put_swap_page(page, entry);
+@@ -382,6 +447,8 @@ struct page *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
  	struct page *found_page, *new_page = NULL;
  	struct address_space *swapper_space = swap_address_space(entry);
  	int err;
@@ -6539,7 +6733,7 @@ index b99e8fd93cd3..16e27da479b8 100644
  	*new_page_allocated = false;
  
  	do {
-@@ -443,13 +446,16 @@ struct page *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
+@@ -443,13 +510,16 @@ struct page *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
  		/* May fail (-ENOMEM) if radix-tree node allocation failed. */
  		__SetPageLocked(new_page);
  		__SetPageSwapBacked(new_page);
@@ -6559,7 +6753,7 @@ index b99e8fd93cd3..16e27da479b8 100644
  			*new_page_allocated = true;
  			return new_page;
 diff --git a/mm/swapfile.c b/mm/swapfile.c
-index 8799a574dc63..590160286237 100644
+index 8799a574dc63..08f7590454b4 100644
 --- a/mm/swapfile.c
 +++ b/mm/swapfile.c
 @@ -6,6 +6,7 @@
@@ -6570,7 +6764,23 @@ index 8799a574dc63..590160286237 100644
  #include <linux/sched/mm.h>
  #include <linux/sched/task.h>
  #include <linux/hugetlb.h>
-@@ -1811,7 +1812,8 @@ static int unuse_pte(struct vm_area_struct *vma, pmd_t *pmd,
+@@ -664,6 +665,7 @@ static void add_to_avail_list(struct swap_info_struct *p)
+ static void swap_range_free(struct swap_info_struct *si, unsigned long offset,
+ 			    unsigned int nr_entries)
+ {
++	unsigned long begin = offset;
+ 	unsigned long end = offset + nr_entries - 1;
+ 	void (*swap_slot_free_notify)(struct block_device *, unsigned long);
+ 
+@@ -689,6 +691,7 @@ static void swap_range_free(struct swap_info_struct *si, unsigned long offset,
+ 			swap_slot_free_notify(si->bdev, offset);
+ 		offset++;
+ 	}
++	clear_shadow_from_swap_cache(si->type, begin, end);
+ }
+ 
+ static int scan_swap_map_slots(struct swap_info_struct *si,
+@@ -1811,7 +1814,8 @@ static int unuse_pte(struct vm_area_struct *vma, pmd_t *pmd,
  	 * Move the page to the active list so it is not
  	 * immediately swapped out again after swapon.
  	 */
@@ -6580,7 +6790,7 @@ index 8799a574dc63..590160286237 100644
  out:
  	pte_unmap_unlock(pte, ptl);
  out_nolock:
-@@ -1960,7 +1962,8 @@ static int unuse_mm(struct mm_struct *mm,
+@@ -1960,7 +1964,8 @@ static int unuse_mm(struct mm_struct *mm,
  		 * Activate page so shrink_inactive_list is unlikely to unmap
  		 * its ptes while lock is dropped, so swapoff can make progress.
  		 */
@@ -6821,7 +7031,7 @@ index 39021133cec8..01b16e51c563 100644
 +}
 +late_initcall(vmpressure_global_init);
 diff --git a/mm/vmscan.c b/mm/vmscan.c
-index 2ceb741d5137..8251556a22b7 100644
+index 2ceb741d5137..5389fbbdcf50 100644
 --- a/mm/vmscan.c
 +++ b/mm/vmscan.c
 @@ -50,6 +50,10 @@
@@ -8674,7 +8884,7 @@ index 2ceb741d5137..8251556a22b7 100644
 +		success = lru_gen_del_page(lruvec, page, true);
 +		VM_BUG_ON_PAGE(!success, page);
 +		SetPageUnevictable(page);
-+		add_page_to_lru_list(page, lruvec);
++		add_page_to_lru_list(page, lruvec, page_lru(page));
 +		__count_vm_events(UNEVICTABLE_PGCULLED, delta);
 +		return true;
 +	}
@@ -8683,7 +8893,7 @@ index 2ceb741d5137..8251556a22b7 100644
 +		success = lru_gen_del_page(lruvec, page, true);
 +		VM_BUG_ON_PAGE(!success, page);
 +		SetPageSwapBacked(page);
-+		add_page_to_lru_list_tail(page, lruvec);
++		add_page_to_lru_list_tail(page, lruvec, page_lru(page));
 +		return true;
 +	}
 +
@@ -9117,7 +9327,7 @@ index 2ceb741d5137..8251556a22b7 100644
 +
 +			prefetchw_prev_lru_page(page, head, flags);
 +
-+			del_page_from_lru_list(page, lruvec);
++			del_page_from_lru_list(page, lruvec, page_lru(page));
 +			success = lru_gen_add_page(lruvec, page, false);
 +			VM_BUG_ON(!success);
 +
@@ -9151,7 +9361,7 @@ index 2ceb741d5137..8251556a22b7 100644
 +
 +			success = lru_gen_del_page(lruvec, page, false);
 +			VM_BUG_ON(!success);
-+			add_page_to_lru_list(page, lruvec);
++			add_page_to_lru_list(page, lruvec, page_lru(page));
 +
 +			if (!--remaining)
 +				return false;
