@@ -1,0 +1,34 @@
+# MoonWake
+
+Redmi Note 12 pro 5G (ruby) kernel specify for powersave
+
+## Features
+
+- KernelSU patch (Can build with sukisu, ksun or ksu type root)
+- SusFS patch
+- BBR3 implemented
+- Sync with [linux-cip](https://git.kernel.org/pub/scm/linux/kernel/git/cip/linux-cip.git/), google [kernel/common](https://android.googlesource.com/kernel/common) and [xiaomi-mediatek-devs/android_kernel_xiaomi_mt6877](https://github.com/xiaomi-mediatek-devs/android_kernel_xiaomi_mt6877) repo
+- Enable some twaek for powersave but keep the performance
+- ln8000 fast charge driver enabled
+- Updated wireguard module
+- Use google clang 21
+
+## Compile guide
+
+### Option 1: Compile and go (This way to compile my kernel directly from my source)
+
+1. Fork [DPR-MoonWake/KernelAction](https://github.com/DPR-MoonWake/KernelAction) repo
+2. Enable action build in Actions tab
+3. Click on `Build MoonWake Kernel`
+4. Click on `Run workflow`
+5. With `Choose a config type` option, choose it as `release`
+6. With `Path to a specific config JSON file (optional). Leave blank to use all configs.`, type `moonwake.json`
+7. Click `Run workflow` green button and wait
+8. Download, extract the build and flash!
+
+If you don't know how to flash, [read this wiki!](https://github.com/DPR-MoonWake/moonwake_kernel_xiaomi_ruby/wiki) or join <https://t.me/RedmiNote12ProPlusCommunity> to ask me (@RainyXeon)!
+
+### Option 2: Kernel Player (For advanced user that build android kernel before)
+
+Since you (Kernel Player) know how to build, pack AK3 and flash it, I just have some notes for you
+- To add a feature config (eg: vendor/kernelsu.config), please check `arch/arm64/configs/vendor`, see what config you want to add and then use `make $your_args_here vendor/example.config` after using `make $your_args_here ruby_defconfig`
